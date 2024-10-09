@@ -56,7 +56,7 @@ class Piece
     @piece = piece
     @piece_image = piece_image
   end
-  def render_piece
+  def render_piece()
     @render = Image.new(@piece_image, x: @x, y: @y , width: 80, height: 80, z: ZOrder::PIECE)
   end
 
@@ -119,10 +119,8 @@ on :mouse_down do |mouse|
     # Select a piece if it's present at the clicked position
     clicked_piece = pieces.find { |p| p.x == file * 80 && p.y == rank * 80 }
     if clicked_piece
-      @selected_piece = clicked_piece
-      @selected_piece.x = mouse.x
-      @selected_piece.y = mouse.y
-      
+      selected_piece = clicked_piece
+      puts "Clicked #{selected_piece.name}"
     else
       puts "No piece selected."
     end
@@ -130,18 +128,15 @@ on :mouse_down do |mouse|
     # Move the selected piece to the clicked position
     if selected_piece
       puts "Moving piece to (#{file}, #{rank})"
-      @selected_piece.x = file * 80
-      @selected_piece.y = rank * 80
-      @selected_piece
+      selected_piece.x = file * 80
+      selected_piece.y = rank * 80
+      selected_piece.render.remove # Remove the old image
+      selected_piece.render_piece() # Render the piece at the new position
+
+      overlap_piece = pieces.find { |p| p.x == file * 80 && p.y == rank * 80 }
+      overlap_piece.render.remove
     end
   end
 end
-# on :mouse_move do |event|
-#   # Change in the x and y coordinates
-#   if @selected_piece
-#     @selected_piece.x = event.x
-#     @selected_piece.y = event.y
-#     @selected_piece.render()
-#   end
-# end
+
 show
