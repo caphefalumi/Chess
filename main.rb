@@ -5,6 +5,20 @@ module ZOrder
   BOARD, PIECE = *0..1
 end
 
+class Sounds 
+  attr_accessor :capture, :castle, :illegal, :move_check, :move_self, :move_opponent, :game_start, :game_end
+  def initialize()
+    @capture = Music.new("sounds/capture.mp3")
+    @castle = Music.new("sounds/castle.mp3")
+    @illegal = Music.new("sounds/illegal.mp3")
+    @move_check = Music.new("sounds/move_check.mp3")
+    @move_self = Music.new("sounds/move_self.mp3")
+    @move_opponent = Music.new("sounds/move_opponent.mp3")
+    @game_start = Music.new("sounds/game_start.mp3")
+    @game_end = Music.new("sounds/game_end.mp3")
+  end
+end
+
 class Board
 end
 
@@ -48,17 +62,20 @@ end
 
 # Class representing a Piece
 class Piece
-  attr_accessor :x, :y, :piece, :render
+  attr_accessor :x, :y, :piece, :render, :exist
 
-  def initialize(x, y, piece, piece_image)
+  def initialize(x, y, piece, piece_image, exist = true)
     @x = x
     @y = y
     @piece = piece
     @piece_image = piece_image
+    @exist = exist
   end
   def render_piece()
     @render = Image.new(@piece_image, x: @x, y: @y , width: 80, height: 80, z: ZOrder::PIECE)
   end
+
+
 
   # Method to get the name and color of the piece
   def name
@@ -78,10 +95,10 @@ end
 
 # Create a list to store all pieces
 pieces = []
-
+squares = []
 # Window settings
 set width: 640, height: 640
-
+sounds = Sounds.new()
 # Drawing the board and placing the pieces
 for rank in 0...8
   for file in 0...8
@@ -89,8 +106,8 @@ for rank in 0...8
     square_color = isLightSquare ? "#b99b75" : "#6e4e36"
 
     # Draw square
-    Square.new(x: file * 80, y: rank * 80, size: 80, z: ZOrder::BOARD, color: square_color)
-
+    square = Square.new(x: file * 80, y: rank * 80, size: 80, z: ZOrder::BOARD, color: square_color)
+    squares << square
     # Get the piece at the current position
     piece_pos = board_pos[rank][file]
     image_file = piece_image(piece_pos)
@@ -102,8 +119,8 @@ for rank in 0...8
       piece.render_piece
       pieces << piece
 
-      # Draw the piece
     end
+    sounds.game_start.play()
   end
 end
 
@@ -117,7 +134,7 @@ on :mouse_down do |mouse|
   case mouse.button
   when :left
     # Select a piece if it's present at the clicked position
-    clicked_piece = pieces.find { |p| p.x == file * 80 && p.y == rank * 80 }
+    clicked_piece = pieces.find { |p| p.x == file * 80 && p.y == rank * 80 && p.exist}
     if clicked_piece
       selected_piece = clicked_piece
       puts "Clicked #{selected_piece.name}"
@@ -128,13 +145,27 @@ on :mouse_down do |mouse|
     # Move the selected piece to the clicked position
     if selected_piece
       puts "Moving piece to (#{file}, #{rank})"
+      selected_piece.render.remove # Remove the old image
       selected_piece.x = file * 80
       selected_piece.y = rank * 80
-      selected_piece.render.remove # Remove the old image
+      selected_piece.exist = false
       selected_piece.render_piece() # Render the piece at the new position
 
       overlap_piece = pieces.find { |p| p.x == file * 80 && p.y == rank * 80 }
       overlap_piece.render.remove
+      if overlap_piece 
+        sounds.capture.play()
+      else 
+        sounds.move_self.play()
+      end
+      if clicked_piece
+        selected_square = squares.find { |s| s.x == clicked_piece.x && s.y == clicked_piece.y }
+        selected_square.color = "#bd985a"
+      end
+
+      overlap_square = squares.find { |s| s.x == file * 80 && s.y == rank * 80 }
+      overlap_square.color = "#dbb59d"
+
     end
   end
 end
