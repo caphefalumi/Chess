@@ -5,9 +5,10 @@ module ZOrder
   BOARD, OVERLAP, PIECE = *0..2
 end
 
-class Sounds 
+class Sounds
   attr_accessor :capture, :castle, :illegal, :move_check, :move_self, :move_opponent, :game_start, :game_end
-  def initialize()
+
+  def initialize
     @capture = Music.new("sounds/capture.mp3")
     @castle = Music.new("sounds/castle.mp3")
     @illegal = Music.new("sounds/illegal.mp3")
@@ -19,10 +20,7 @@ class Sounds
   end
 end
 
-class Board
-end
-
-module Piece_val
+class PieceEval
   NONE   = 0
   KING   = 1
   PAWN   = 2
@@ -34,152 +32,184 @@ module Piece_val
   BLACK  = 16
 end
 
-
-
 # Helper function to return image file path based on piece
 def piece_image(piece)
-  color = piece & Piece_val::WHITE != 0 ? "w" : "b"
-  case piece & ~Piece_val::WHITE & ~Piece_val::BLACK
-  when Piece_val::KING   then "pieces/#{color}k.png"
-  when Piece_val::QUEEN  then "pieces/#{color}q.png"
-  when Piece_val::ROOK   then "pieces/#{color}r.png"
-  when Piece_val::BISHOP then "pieces/#{color}b.png"
-  when Piece_val::KNIGHT then "pieces/#{color}n.png"
-  when Piece_val::PAWN   then "pieces/#{color}p.png"
+  color = piece & PieceEval::WHITE != 0 ? "w" : "b"
+  case piece & ~PieceEval::WHITE & ~PieceEval::BLACK
+  when PieceEval::KING   then "pieces/#{color}k.png"
+  when PieceEval::QUEEN  then "pieces/#{color}q.png"
+  when PieceEval::ROOK   then "pieces/#{color}r.png"
+  when PieceEval::BISHOP then "pieces/#{color}b.png"
+  when PieceEval::KNIGHT then "pieces/#{color}n.png"
+  when PieceEval::PAWN   then "pieces/#{color}p.png"
   else nil
   end
 end
 
 # Class representing a Piece
 class Piece
-  attr_accessor :x, :y, :piece, :render, :exist
+  attr_accessor :x, :y, :piece_pos, :render, :exist
 
-  def initialize(x, y, piece, piece_image, exist = true)
+  def initialize(x, y, piece_pos, piece_image, exist = true)
     @x = x
     @y = y
-    @piece = piece
+    @piece_pos = piece_pos
     @piece_image = piece_image
     @exist = exist
   end
-  def render_piece()
-    @render = Image.new(@piece_image, x: @x, y: @y , z: ZOrder::PIECE, width: 80, height: 80, )
+
+  def render_piece
+    @render = Image.new(@piece_image, x: @x, y: @y, z: ZOrder::PIECE, width: 80, height: 80)
   end
 
-  # Method to get the name and color of the piece
   def name
-    base_piece = @piece & ~Piece_val::WHITE & ~Piece_val::BLACK
-    color = @piece & Piece_val::WHITE != 0 ? "White" : "Black"
+    base_piece = @piece_pos & ~PieceEval::WHITE & ~PieceEval::BLACK
+    color = @piece_pos & PieceEval::WHITE != 0 ? "White" : "Black"
     case base_piece
-    when Piece_val::KING   then "#{color}King"
-    when Piece_val::QUEEN  then "#{color}Queen"
-    when Piece_val::ROOK   then "#{color}Rook"
-    when Piece_val::BISHOP then "#{color}Bishop"
-    when Piece_val::KNIGHT then "#{color}Knight"
-    when Piece_val::PAWN   then "#{color}Pawn"
+    when PieceEval::KING   then "#{color}King"
+    when PieceEval::QUEEN  then "#{color}Queen"
+    when PieceEval::ROOK   then "#{color}Rook"
+    when PieceEval::BISHOP then "#{color}Bishop"
+    when PieceEval::KNIGHT then "#{color}Knight"
+    when PieceEval::PAWN   then "#{color}Pawn"
     else "No Piece"
     end
   end
-end
 
-# Initial board position
-board_pos = [
-  [Piece_val::ROOK | Piece_val::WHITE, Piece_val::KNIGHT | Piece_val::WHITE, Piece_val::BISHOP | Piece_val::WHITE, Piece_val::QUEEN | Piece_val::WHITE, Piece_val::KING | Piece_val::WHITE, Piece_val::BISHOP | Piece_val::WHITE, Piece_val::KNIGHT | Piece_val::WHITE, Piece_val::ROOK | Piece_val::WHITE],
-  [Piece_val::PAWN | Piece_val::WHITE] * 8,
-  [Piece_val::NONE] * 8,
-  [Piece_val::NONE] * 8,
-  [Piece_val::NONE] * 8,
-  [Piece_val::NONE] * 8,
-  [Piece_val::PAWN | Piece_val::BLACK] * 8,
-  [Piece_val::ROOK | Piece_val::BLACK, Piece_val::KNIGHT | Piece_val::BLACK, Piece_val::BISHOP | Piece_val::BLACK, Piece_val::QUEEN | Piece_val::BLACK, Piece_val::KING | Piece_val::BLACK, Piece_val::BISHOP | Piece_val::BLACK, Piece_val::KNIGHT | Piece_val::BLACK, Piece_val::ROOK | Piece_val::BLACK]
-]
+  def self.IsColour(piece, colour)
+    colour_mask = 0b01000 | 0b10000
+    (piece & colour_mask) == colour
+  end
 
+  def self.Colour(piece)
+    piece & (0b01000 | 0b10000)
+  end
 
-def load_position_from_fen(fen)
-  pieceTypeFromSymbol
-end
+  def self.PieceType(piece)
+    piece & 0b00111
+  end
 
-# Create a list to store all pieces
-pieces = []
-squares = []
-# Window settings
-set width: 640, height: 640
-sounds = Sounds.new()
-# Drawing the board and placing the pieces
-for rank in 0...8
-  for file in 0...8
-    isLightSquare = (file + rank) % 2 != 0
-    square_color = isLightSquare ? "#b99b75" : "#6e4e36"
+  def self.IsRookOrQueen(piece)
+    (piece & 0b110) == 0b110
+  end
 
-    # Draw square
-    square = Square.new(x: file * 80, y: rank * 80, size: 80, z: ZOrder::BOARD, color: square_color)
-    squares << square
-    # Get the piece at the current position
-    piece_pos = board_pos[rank][file]
-    image_file = piece_image(piece_pos)
+  def self.IsBishopOrQueen(piece)
+    (piece & 0b101) == 0b101
+  end
 
-    # Create and store the piece object
-    if image_file
-
-      piece = Piece.new(file * 80, rank * 80, piece_pos, image_file)
-      piece.render_piece
-      pieces << piece
-
-    end
-    sounds.game_start.play()
+  def self.IsSlidingPiece(piece)
+    (piece & 0b100) != 0
   end
 end
 
+class Move
+  attr_accessor :start_square, :target_square
 
-# Function to capture piece based on mouse click
-clicked_piece = nil
-selected_piece = nil
-clicked_square = nil 
-overlap_square = nil
+  def initialize(start_square, target_square)
+    @start_square = start_square
+    @target_square = target_square
+  end
+end
 
-on :mouse_down do |mouse|
-  file = (mouse.x / 80).to_i  # Convert mouse click to file
-  rank = (mouse.y / 80).to_i  # Convert mouse click to rank
-  
+class Game
+  attr_reader :sounds, :pieces, :squares, :board_pos, :clicked_piece, :clicked_square, :overlap_square
 
-  case mouse.button
-  when :left
-    # Select a piece if it's present at the clicked position
-    if clicked_square && overlap_square 
-      clicked_square.remove 
-      overlap_square.remove
+  def initialize
+    @sounds = Sounds.new
+    @pieces = []
+    @squares = []
+    @board_pos = initialize_board
+    draw_board
+  end
+
+  def initialize_board
+    [
+      [PieceEval::ROOK | PieceEval::WHITE, PieceEval::KNIGHT | PieceEval::WHITE, PieceEval::BISHOP | PieceEval::WHITE, PieceEval::QUEEN | PieceEval::WHITE, PieceEval::KING | PieceEval::WHITE, PieceEval::BISHOP | PieceEval::WHITE, PieceEval::KNIGHT | PieceEval::WHITE, PieceEval::ROOK | PieceEval::WHITE],
+      [PieceEval::PAWN | PieceEval::WHITE] * 8,
+      [PieceEval::NONE] * 8,
+      [PieceEval::NONE] * 8,
+      [PieceEval::NONE] * 8,
+      [PieceEval::NONE] * 8,
+      [PieceEval::PAWN | PieceEval::BLACK] * 8,
+      [PieceEval::ROOK | PieceEval::BLACK, PieceEval::KNIGHT | PieceEval::BLACK, PieceEval::BISHOP | PieceEval::BLACK, PieceEval::QUEEN | PieceEval::BLACK, PieceEval::KING | PieceEval::BLACK, PieceEval::BISHOP | PieceEval::BLACK, PieceEval::KNIGHT | PieceEval::BLACK, PieceEval::ROOK | PieceEval::BLACK]
+    ]
+  end
+
+  def draw_board
+    (0...8).each do |rank|
+      (0...8).each do |file|
+        is_light_square = (rank + file) % 2 != 0
+        square_color = is_light_square ? "#b99b75" : "#6e4e36"
+
+        # Draw square
+        square = Square.new(x: rank * 80, y: file * 80, size: 80, z: ZOrder::BOARD, color: square_color)
+        @squares << square
+
+        # Get the piece at the current position
+        piece_pos = @board_pos[file][rank]
+        image_file = piece_image(piece_pos)
+
+        # Create and store the piece object
+        if image_file
+          piece = Piece.new(rank * 80, file * 80, piece_pos, image_file)
+          piece.render_piece
+          @pieces << piece
+        end
+        @sounds.game_start.play
+      end
     end
-    clicked_piece = pieces.find { |p| p.x == file * 80 && p.y == rank * 80 && p.exist}
-    if clicked_piece
-      old_pos_x = clicked_piece.x
-      old_pos_y = clicked_piece.y
-      clicked_square = Square.new(x: clicked_piece.x, y: clicked_piece.y, z:ZOrder::OVERLAP, size:80, color: "#B58B37")
-      clicked_square.color.opacity = 0.8
-      puts "Clicked #{clicked_piece.name}"
-    end
-  when :right
-    # Move the selected piece to the clicked position
-    if clicked_piece 
-      overlap_piece = pieces.find { |p| p.x == file * 80 && p.y == rank * 80 && p.exist}
-      overlap_piece.render.remove if overlap_piece
-      if overlap_piece 
-        overlap_piece.exist = false
-        sounds.capture.play()
-      else 
-        sounds.move_self.play()
+  end
+
+  def handle_mouse_click(mouse)
+    rank = (mouse.x / 80).to_i  # Convert mouse click to file
+    file = (mouse.y / 80).to_i  # Convert mouse click to rank
+
+    case mouse.button
+    when :left
+      if @clicked_square && @overlap_square
+        @clicked_square.remove
+        @overlap_square.remove
       end
 
-      overlap_square = Square.new(x: file * 80, y: rank * 80, z:ZOrder::OVERLAP, size:80, color: "#B58B37")
-      overlap_square.color.opacity = 0.8
-      clicked_piece.render.remove # Remove the old image
-      clicked_piece.x = file * 80
-      clicked_piece.y = rank * 80
-      clicked_piece.render_piece() # Render the piece at the new position
+      @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
+      if @clicked_piece
+        @clicked_square = Square.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+        @clicked_square.color.opacity = 0.8
+        puts "Clicked #{@clicked_piece.name}"
+      end
+    when :right
+      if @clicked_piece
+        overlap_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
+        overlap_piece.render.remove if overlap_piece
+        if overlap_piece
+          overlap_piece.exist = false
+          @sounds.capture.play
+        else
+          @sounds.move_self.play
+        end
 
-      puts "Moving piece to (#{file}, #{rank})"
-      clicked_piece = nil
-      selected_piece = nil
+        @overlap_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+        @overlap_square.color.opacity = 0.8
+        @clicked_piece.render.remove # Remove the old image
+        @clicked_piece.x = rank * 80
+        @clicked_piece.y = file * 80
+        @clicked_piece.render_piece # Render the piece at the new position
+
+        puts "Moving piece to (#{file}, #{rank})"
+        @clicked_piece = nil
+      end
     end
   end
+end
+
+# Window settings
+set width: 640, height: 640
+
+# Initialize Game
+game = Game.new
+
+on :mouse_down do |mouse|
+  game.handle_mouse_click(mouse)
 end
 
 show
