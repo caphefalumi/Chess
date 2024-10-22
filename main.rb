@@ -126,7 +126,7 @@ class Piece
               end
   
     indices.each do |i|
-      x, y = @rank, @file
+      x, y = @x/80, @y/80
       loop do
         x += directions[i][0]
         y += directions[i][1]
@@ -151,14 +151,16 @@ class Piece
   end
   
   def add_move_if_legal(new_x, new_y)
-    if new_x.between?(0, 7) && new_y.between?(0, 7) # Check within bounds
-      target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 && p.exist}
-      if target_piece.nil? || target_piece.color != color # Legal if empty or capturing
+    if new_x.between?(0, 7*80) && new_y.between?(0, 7*80) # Check within bounds
+      target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 && p.exist }
+      if target_piece.nil? # Legal if empty
         moves << [new_x, new_y] # Store legal move
         return true
+      elsif target_piece.color != color # Legal if capturing an opponent
+        moves << [new_x, new_y] # Store capturing move
+        return false # Stop further moves in this direction
       end
-    end
-    false
+    end 
   end
   
 end
@@ -224,85 +226,139 @@ class Game
   end
 
   def handle_mouse_click(mouse)
-    rank = (mouse.x / 80).to_i  # Convert mouse click to file
-    file = (mouse.y / 80).to_i  # Convert mouse click to rank
+    rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
   
     case mouse.button
     when :left
-      # Clear previous selections and moves if clicked on a piece again or if in an illegal state
-      if @clicked_square && (@overlap_square || @illegal_state)
-        @clicked_square.remove
-        @overlap_square.remove if @overlap_square
-        @moves.each(&:remove)  # Remove old move indicators
-        @moves.clear            # Clear the moves array
-      end
-  
+      @illegal_state = false
+      clear_previous_selection if @clicked_square && (@overlap_square || @illegal_state)
+      
       if !@is_piece_clicked
-        # Select the piece
-        @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
-        if @clicked_piece
-          @clicked_piece.generate_moves()
-          @clicked_piece.moves.each do |move|
-            move_circle = Circle.new(x: move[0] * 80 + 40, y: move[1] * 80 + 40, radius: 10, color: 'black', z: ZOrder::OVERLAP)
-            overlap_moves_piece = @pieces.find { |p| p.x == move[0] * 80 && p.y == move[1] * 80 && p.exist }
-            if overlap_moves_piece
-              move_circle.radius = 15
-              move_circle.color.opacity = 0.5
-              move_circle.z = ZOrder::PIECE + 1
-            else
-              move_circle.color.opacity = 0.4
-            end
-            @moves << move_circle
-          end
-        end
-      end
-  
-      if @clicked_piece
-        if !@is_piece_clicked
-          # First click: Highlight the selected piece
-          @clicked_square = Square.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
-          @clicked_square.color.opacity = 0.8
-          @is_piece_clicked = true
-          puts "Clicked #{@clicked_piece.name}"
-        else
-          # Second click: Try to move the piece
-          overlap_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
-          @illegal_state = false
-          if overlap_piece
-            if overlap_piece.color == @clicked_piece.color
-              @sounds.illegal.play
-              @illegal_state = true
-            else
-              # Capture the piece
-              overlap_piece.render.remove
-              overlap_piece.exist = false
-              @sounds.capture.play
-            end
-          else
-            # Move
-            @sounds.move_self.play
-          end
-          
-          if !@illegal_state
-            # Draw overlap square for the move
-            @overlap_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
-            @overlap_square.color.opacity = 0.8
-  
-            # Move the clicked piece
-            @clicked_piece.render.remove
-            @clicked_piece.x = rank * 80
-            @clicked_piece.y = file * 80
-            @clicked_piece.render_piece
-  
-            puts "Moved #{@clicked_piece.name} piece to (#{file}, #{rank})"
-          end
-          # Reset the state after the move
-          @is_piece_clicked = false
-          @clicked_piece = nil
-        end
+        select_piece(rank, file)
+      elsif @clicked_piece
+        move_piece_or_capture(rank, file)
       end
     end
   end
+  
+  
+  # Clears previous selections and moves if necessary
+  def clear_previous_selection
+    @clicked_square.remove if @clicked_square
+    @overlap_square.remove if @overlap_square
+    @moves.each(&:remove)
+    @moves.clear
+  end
+  
+  # Selects a piece if one is found at the clicked square
+  def select_piece(rank, file)
+    @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
+  
+    if @clicked_piece
+      @clicked_piece.generate_moves
+      highlight_moves(@clicked_piece)
+      highlight_selected_piece
+      @is_piece_clicked = true
+      puts "Clicked #{@clicked_piece.name}"
+    end
+  end
+  
+  # Highlights all possible moves for the selected piece
+  def highlight_moves(piece)
+    piece.moves.each do |move|
+      move_circle = Circle.new(x: move[0] * 80 + 40, y: move[1] * 80 + 40, radius: 10, color: 'black', z: ZOrder::OVERLAP)
+      target_piece_square = @pieces.find { |p| p.x == move[0] * 80 && p.y == move[1] * 80 && p.exist }
+  
+      if target_piece_square
+        move_circle.radius = 15
+        move_circle.color.opacity = 0.5
+        move_circle.z = ZOrder::PIECE + 1
+      else
+        move_circle.color.opacity = 0.4
+      end
+  
+      @moves << move_circle
+    end
+  end
+  
+  # Highlights the selected piece on the board
+  def highlight_selected_piece
+    @clicked_square = Square.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+    @clicked_square.color.opacity = 0.8
+  end
+  
+  # Attempts to move the piece or capture an opponent piece
+  def move_piece_or_capture(rank, file)
+    target_move = [rank, file]
+
+    # Check if the target move is in the list of legal moves
+    if not @clicked_piece.moves.include?(target_move)
+      handle_illegal_move
+      @clicked_square.color = 'red'
+      return
+    end
+  
+    target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
+    @illegal_state = false
+  
+    if target_piece
+      if target_piece.color == @clicked_piece.color
+        handle_illegal_move
+      else
+        capture_piece(target_piece)   # Capture the piece and play the capture sound
+        move_piece(rank, file)        # Move the selected piece after the capture
+      end
+    else
+      move_piece(rank, file)          # Normal move
+    end
+  
+    reset_state_after_move unless @illegal_state
+  end
+  
+  
+  # Handles illegal move (e.g., trying to move to a square with a piece of the same color)
+  def handle_illegal_move
+    @sounds.illegal.play
+    @clicked_piece.moves.clear
+    @illegal_state = true
+  end
+  
+  # Captures the opponent's piece
+  def capture_piece(target_piece, rank, file)
+    target_piece.render.remove
+    target_piece.exist = false
+    # Move the clicked piece to the new coordinates
+    @clicked_piece.render.remove
+    @clicked_piece.x = rank * 80  # Update the x position
+    @clicked_piece.y = file * 80  # Update the y position
+    @clicked_piece.render_piece    # Re-render the piece in the new position
+    puts "Moved #{@clicked_piece.name} piece to (#{file}, #{rank})"
+    @sounds.capture.play
+  end
+  
+  # Moves the selected piece to the new square
+  def move_piece(rank, file)
+    @sounds.move_self.play
+  
+    # Draw the square indicating the piece has moved
+    @overlap_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+    @overlap_square.color.opacity = 0.8
+  
+    # Move the clicked piece to the new coordinates
+    @clicked_piece.render.remove
+    @clicked_piece.x = rank * 80  # Update the x position
+    @clicked_piece.y = file * 80  # Update the y position
+    @clicked_piece.render_piece    # Re-render the piece in the new position
+  
+    puts "Moved #{@clicked_piece.name} piece to (#{file}, #{rank})"
+  end
+  
+  # Resets the state after the move is completed
+  def reset_state_after_move
+    @is_piece_clicked = false
+    @clicked_piece = nil
+  end
+  
   
 end
 
