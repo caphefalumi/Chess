@@ -88,11 +88,12 @@ class Piece
   end
 
   def generate_moves
+    @moves.clear
     case piece_type
     when "King"
       king_moves
     when "Queen", "Rook", "Bishop"
-      sliding_moves
+      sliding_moves(piece_type)
     when "Knight"
       knight_moves
     when "Pawn"
@@ -103,19 +104,32 @@ class Piece
   def king_moves
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx, dy|
-      new_x = @rank + dx
-      new_y = @file + dy
+      new_x = @x/80 + dx
+      new_y = @y/80 + dy
       add_move_if_legal(new_x, new_y)
     end
   end
   
-  def sliding_moves
+  def sliding_moves(piece)
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
-    directions.each do |dx, dy|
+  
+    # Determine which direction indices to use based on the piece type
+    indices = case piece
+              when "Bishop"
+                (4..7).to_a  # Diagonal directions
+              when "Rook"
+                (0..3).to_a  # Straight directions
+              when "Queen"
+                (0..7).to_a  # All directions
+              else
+                []           # Handle other cases or raise an error
+              end
+  
+    indices.each do |i|
       x, y = @rank, @file
       loop do
-        x += dx
-        y += dy
+        x += directions[i][0]
+        y += directions[i][1]
         break unless add_move_if_legal(x, y)
       end
     end
@@ -124,21 +138,21 @@ class Piece
   def knight_moves
     knight_offsets = [[2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]]
     knight_offsets.each do |dx, dy|
-      new_x = @rank + dx
-      new_y = @file + dy
+      new_x = @x/80 + dx
+      new_y = @y/80 + dy
       add_move_if_legal(new_x, new_y)
     end
   end
   
   def pawn_moves
     direction = @piece & PieceEval::WHITE > 0 ? -1 : 1 # White moves up, Black moves down
-    add_move_if_legal(@rank, @file + direction) # Forward move
+    add_move_if_legal(@x/80, @y/80 + direction) # Forward move
     # Add logic for capturing, double moves, etc.
   end
   
   def add_move_if_legal(new_x, new_y)
     if new_x.between?(0, 7) && new_y.between?(0, 7) # Check within bounds
-      target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 }
+      target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 && p.exist}
       if target_piece.nil? || target_piece.color != color # Legal if empty or capturing
         moves << [new_x, new_y] # Store legal move
         return true
@@ -215,63 +229,71 @@ class Game
   
     case mouse.button
     when :left
-
-      if @clicked_square && @overlap_square || @illegal_state
+      # Clear previous selections and moves if clicked on a piece again or if in an illegal state
+      if @clicked_square && (@overlap_square || @illegal_state)
         @clicked_square.remove
-        @overlap_square.remove
-        @moves.each do |move|
-          move.remove
-        end
+        @overlap_square.remove if @overlap_square
+        @moves.each(&:remove)  # Remove old move indicators
+        @moves.clear            # Clear the moves array
       end
   
       if !@is_piece_clicked
+        # Select the piece
         @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
-        @clicked_piece.generate_moves()
-        @clicked_piece.moves.each do |move|
-          move_circle = Circle.new(x: move[0] * 80 + 40, y: move[1] * 80 + 40, radius: 10, color: 'black', z: ZOrder::OVERLAP)
-          move_circle.color.opacity = 0.4
-          @moves << move_circle
+        if @clicked_piece
+          @clicked_piece.generate_moves()
+          @clicked_piece.moves.each do |move|
+            move_circle = Circle.new(x: move[0] * 80 + 40, y: move[1] * 80 + 40, radius: 10, color: 'black', z: ZOrder::OVERLAP)
+            overlap_moves_piece = @pieces.find { |p| p.x == move[0] * 80 && p.y == move[1] * 80 && p.exist }
+            if overlap_moves_piece
+              move_circle.radius = 15
+              move_circle.color.opacity = 0.5
+              move_circle.z = ZOrder::PIECE + 1
+            else
+              move_circle.color.opacity = 0.4
+            end
+            @moves << move_circle
+          end
         end
       end
-
+  
       if @clicked_piece
         if !@is_piece_clicked
-          # First click: Select the piece
+          # First click: Highlight the selected piece
           @clicked_square = Square.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
           @clicked_square.color.opacity = 0.8
           @is_piece_clicked = true
           puts "Clicked #{@clicked_piece.name}"
         else
           # Second click: Try to move the piece
-          overlap_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist  }
+          overlap_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
           @illegal_state = false
           if overlap_piece
             if overlap_piece.color == @clicked_piece.color
               @sounds.illegal.play
               @illegal_state = true
             else
-              #Capture 
+              # Capture the piece
               overlap_piece.render.remove
               overlap_piece.exist = false
               @sounds.capture.play
             end
           else
-            #Move
+            # Move
             @sounds.move_self.play
           end
           
           if !@illegal_state
-            # Draw color on overlap square
+            # Draw overlap square for the move
             @overlap_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
             @overlap_square.color.opacity = 0.8
-            
-            # Render at the new pos of overlap piece
+  
+            # Move the clicked piece
             @clicked_piece.render.remove
-            @clicked_piece.x = rank*80
-            @clicked_piece.y = file*80
+            @clicked_piece.x = rank * 80
+            @clicked_piece.y = file * 80
             @clicked_piece.render_piece
-            
-
+  
             puts "Moved #{@clicked_piece.name} piece to (#{file}, #{rank})"
           end
           # Reset the state after the move
@@ -281,6 +303,7 @@ class Game
       end
     end
   end
+  
 end
 
 # Window settings
