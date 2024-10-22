@@ -63,9 +63,9 @@ class Piece
   end
 
   def name
-    base_piece = @piece_pos & ~PieceEval::WHITE & ~PieceEval::BLACK
-    color = @piece_pos & PieceEval::WHITE != 0 ? "White" : "Black"
-    case base_piece
+    piece_type = @piece_pos & 0b00111
+    color = @piece_pos & (0b01000 | 0b10000) == 8 ? "White" : "Black"
+    case piece_type
     when PieceEval::KING   then "#{color}King"
     when PieceEval::QUEEN  then "#{color}Queen"
     when PieceEval::ROOK   then "#{color}Rook"
@@ -76,28 +76,23 @@ class Piece
     end
   end
 
-  def self.IsColour(piece, colour)
-    colour_mask = 0b01000 | 0b10000
-    (piece & colour_mask) == colour
+  def color()
+    @piece_pos & (0b01000 | 0b10000) == 8 ? "White" : "Black"
   end
 
-  def self.Colour(piece)
-    piece & (0b01000 | 0b10000)
-  end
-
-  def self.PieceType(piece)
+  def piece_type(piece)
     piece & 0b00111
   end
 
-  def self.IsRookOrQueen(piece)
+  def IsRookOrQueen(piece)
     (piece & 0b110) == 0b110
   end
 
-  def self.IsBishopOrQueen(piece)
+  def IsBishopOrQueen(piece)
     (piece & 0b101) == 0b101
   end
 
-  def self.IsSlidingPiece(piece)
+  def IsSlidingPiece(piece)
     (piece & 0b100) != 0
   end
 end
@@ -119,6 +114,7 @@ class Game
     @pieces = []
     @squares = []
     @board_pos = initialize_board
+    @is_piece_clicked = false
     draw_board
   end
 
@@ -148,7 +144,6 @@ class Game
         # Get the piece at the current position
         piece_pos = @board_pos[file][rank]
         image_file = piece_image(piece_pos)
-
         # Create and store the piece object
         if image_file
           piece = Piece.new(rank * 80, file * 80, piece_pos, image_file)
@@ -163,40 +158,55 @@ class Game
   def handle_mouse_click(mouse)
     rank = (mouse.x / 80).to_i  # Convert mouse click to file
     file = (mouse.y / 80).to_i  # Convert mouse click to rank
-
+  
     case mouse.button
     when :left
+
       if @clicked_square && @overlap_square
         @clicked_square.remove
         @overlap_square.remove
       end
-
-      @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
-      if @clicked_piece
-        @clicked_square = Square.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
-        @clicked_square.color.opacity = 0.8
-        puts "Clicked #{@clicked_piece.name}"
+  
+      if !@is_piece_clicked
+        @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
       end
-    when :right
       if @clicked_piece
-        overlap_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
-        overlap_piece.render.remove if overlap_piece
-        if overlap_piece
-          overlap_piece.exist = false
-          @sounds.capture.play
+        if !@is_piece_clicked
+          # First click: Select the piece
+          @clicked_square = Square.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+          @clicked_square.color.opacity = 0.8
+          @is_piece_clicked = true
+          puts "Clicked #{@clicked_piece.name}"
         else
-          @sounds.move_self.play
+          # Second click: Try to move the piece
+          overlap_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
+          
+          if overlap_piece
+            #Capture 
+            overlap_piece.render.remove
+            overlap_piece.exist = false
+            @sounds.capture.play
+          else
+            #Move
+            @sounds.move_self.play
+          end
+  
+          # Draw color on overlap square
+          @overlap_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+          @overlap_square.color.opacity = 0.8
+          
+          # Render at the new pos of overlap piece
+          @clicked_piece.render.remove
+          @clicked_piece.x = rank*80
+          @clicked_piece.y = file*80
+          @clicked_piece.render_piece
+          
+          puts "Moved #{@clicked_piece.name} piece to (#{file}, #{rank})"
+          
+          # Reset the state after the move
+          @is_piece_clicked = false
+          @clicked_piece = nil
         end
-
-        @overlap_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
-        @overlap_square.color.opacity = 0.8
-        @clicked_piece.render.remove # Remove the old image
-        @clicked_piece.x = rank * 80
-        @clicked_piece.y = file * 80
-        @clicked_piece.render_piece # Render the piece at the new position
-
-        puts "Moving piece to (#{file}, #{rank})"
-        @clicked_piece = nil
       end
     end
   end
