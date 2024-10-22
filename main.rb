@@ -230,9 +230,11 @@ class Game
   
     case mouse.button
     when :left
-      @illegal_state = false
       clear_previous_selection if @clicked_square && (@overlap_square || @illegal_state)
       
+      # Reset the illegal state if a piece is clicked, and allow new selection
+      @illegal_state = false if @clicked_piece && @illegal_state
+  
       if !@is_piece_clicked
         select_piece(rank, file)
       elsif @clicked_piece
@@ -240,6 +242,7 @@ class Game
       end
     end
   end
+  
   
   
   # Clears previous selections and moves if necessary
@@ -294,7 +297,7 @@ class Game
     # Check if the target move is in the list of legal moves
     if not @clicked_piece.moves.include?(target_move)
       handle_illegal_move
-      @clicked_square.color = 'red'
+      reset_state_after_move
       return
     end
   
