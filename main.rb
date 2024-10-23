@@ -169,7 +169,7 @@ end
 
 
 class Game
-  attr_reader :sounds, :pieces, :squares, :board, :clicked_piece, :clicked_square, :target_square
+  attr_reader :sounds, :pieces, :squares, :board, :clicked_piece
 
   def initialize
     @sounds = Sounds.new
@@ -233,7 +233,7 @@ class Game
   # Generates a random legal move for black
   def generate_black_move
     puts "Generating black move..."
-    clear_previous_selection
+  
     black_pieces = @pieces.select { |p| p.color == "Black" && p.exist }
     return if black_pieces.empty?
   
@@ -250,22 +250,30 @@ class Game
       piece_to_move.generate_moves
     end
   
-    # Update the clicked_piece for reference (not strictly necessary for AI move)
-    @clicked_piece = piece_to_move
-    puts "Black piece: #{@clicked_piece.name}"
-    puts "Black piece position: #{@clicked_piece.position}"
-    
-    # Select a valid move that is not the current position
-    move = piece_to_move.moves.sample
-    puts "Target move: (#{move[0]}, #{move[1]})"
-    
-    # Move the piece and update the board state
-    highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
-    move_piece_or_capture(move[0], move[1])
-    
-    # Switch turns to white after AI move
-    @current_turn = :white
+  
+    # Create a new thread for the delay
+    Thread.new do
+      sleep(1)  # Wait for 1 second
+      # Store the piece and move
+      clear_previous_selection
+      @clicked_piece = piece_to_move
+      move = piece_to_move.moves.sample
+      puts "Black piece: #{@clicked_piece.name}"
+      puts "Black piece position: #{@clicked_piece.position}"
+      puts "Target move: (#{move[0]}, #{move[1]})"
+      # Ensure @clicked_piece is still valid before moving
+      if @clicked_piece
+        highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
+        move_piece_or_capture(move[0], move[1])
+        
+        # Switch turns to white after AI move
+        @current_turn = :white
+      else
+        puts "Clicked piece is no longer valid."
+      end
+    end
   end
+  
   
   
 
@@ -297,7 +305,7 @@ class Game
     if @clicked_piece
       @clicked_piece.generate_moves
 
-      highlight_moves(@clicked_piece)
+      draw_possible_moves(@clicked_piece)
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
       @is_piece_clicked = true
       puts "Clicked #{@clicked_piece.name}"
@@ -305,7 +313,7 @@ class Game
   end
   
   # Highlights all possible moves for the selected piece
-  def highlight_moves(piece)
+  def draw_possible_moves(piece)
     piece.moves.each do |move|
       move_circle = Circle.new(x: move[0] * 80 + 40, y: move[1] * 80 + 40, radius: 10, color: 'black', z: ZOrder::OVERLAP)
       target_piece_square = @pieces.find { |p| p.x == move[0] * 80 && p.y == move[1] * 80 && p.exist }
@@ -341,27 +349,21 @@ class Game
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
     @illegal_state = false
   
-    if target_piece
-      if target_piece.color == @clicked_piece.color
-        handle_illegal_move
-        generate_black_move if @clicked_piece.color == "Black"
-      else
-        #Capture
-        capture_piece(target_piece, rank, file)   
-        move_piece(rank, file)    
-      end
-    else
-      move_piece(rank, file) # Normal move
+    if target_piece && target_piece.color == @clicked_piece.color
+      handle_illegal_move
+    elsif target_piece
+      capture_piece(target_piece)
     end
-  
+    move_piece(rank, file)
+    turn
     reset_state_after_move
   end
   
   # Captures the opponent's piece
-  def capture_piece(target_piece, rank, file)
+  def capture_piece(target_piece)
     target_piece.render.remove
     target_piece.exist = false
-    render_at_new_pos(rank, file)
+    render_at_new_pos(target_piece.x/80, target_piece.y/80)
     puts "Captured #{@clicked_piece.name} piece"
     @sounds.capture.play
   end
@@ -374,10 +376,7 @@ class Game
   end
   # Move the selected piece to the new square
   def move_piece(rank, file)
-    
     @sounds.move_self.play
-    
-    # Always create the target square visual
     @target_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
     @target_square.color.opacity = 0.8
     render_at_new_pos(rank, file)
@@ -397,8 +396,9 @@ class Game
 
   # Clears previous selections and moves if necessary
   def clear_previous_selection
-    @clicked_square.remove if @clicked_square
+    
     @target_square.remove if @target_square
+    @clicked_square.remove if @clicked_square
     @moves.each(&:remove)
     @moves.clear
   end
@@ -413,7 +413,7 @@ class Game
   def reset_state_after_move
     @is_piece_clicked = false
     @clicked_piece = nil
-    turn if @illegal_state == false
+
   end
   
   
