@@ -49,7 +49,7 @@ end
 
 # Class representing a Piece
 class Piece
-  attr_accessor :x, :y, :piece, :moves, :render, :exist, :game
+  attr_accessor :x, :y, :piece, :moves, :render, :exist
 
   def initialize(x, y, piece, piece_image, game, exist = true)
     @x = x
@@ -65,6 +65,10 @@ class Piece
 
   def render_piece
     @render = Image.new(@piece_image, x: @x, y: @y, z: ZOrder::PIECE, width: 80, height: 80)
+  end
+
+  def position
+    "#{@x/80} #{@y/80}"
   end
 
   def name
@@ -114,18 +118,16 @@ class Piece
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
   
     # Determine which direction indices to use based on the piece type
-    indices = case piece
+    directions_offsets = case piece
               when "Bishop"
                 (4..7).to_a  # Diagonal directions
               when "Rook"
                 (0..3).to_a  # Straight directions
               when "Queen"
                 (0..7).to_a  # All directions
-              else
-                []           # Handle other cases or raise an error
               end
   
-    indices.each do |i|
+    directions_offsets.each do |i|
       x, y = @x/80, @y/80
       loop do
         x += directions[i][0]
@@ -182,7 +184,9 @@ class Game
     @pieces = []
     @squares = []
     @moves = []
+    @current_turn =:white
     @board = initialize_board
+
     @is_piece_clicked = false
 
     draw_board
@@ -225,6 +229,41 @@ class Game
     end
   end
 
+  def turn
+    if @current_turn == :white
+      @current_turn = :black
+      generate_black_move
+    else
+      @current_turn = :white
+    end
+  end
+  
+  # Generates a random legal move for black
+  def generate_black_move
+    puts "Generating"
+    black_pieces = @pieces.select { |p| p.color == "Black" && p.exist }
+    return if black_pieces.empty?
+  
+    piece_to_move = black_pieces.sample
+    piece_to_move.generate_moves
+  
+    # Continue to sample until a piece with available moves is found
+    while !piece_to_move.moves.any?
+      piece_to_move = black_pieces.sample
+      piece_to_move.generate_moves
+      puts piece_to_move.moves
+    end
+  
+    target_move = piece_to_move.moves
+    @clicked_piece = piece_to_move
+    puts @clicked_piece.name
+    puts @clicked_piece.position
+    puts "#{target_move[0]} #{target_move[1]}"
+    move_piece_or_capture(target_move[0], target_move[1])
+    @current_turn = :white
+  end
+  
+
   def handle_mouse_click(mouse)
     rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
   
@@ -235,23 +274,19 @@ class Game
       # Reset the illegal state if a piece is clicked, and allow new selection
       @illegal_state = false if @clicked_piece && @illegal_state
   
-      if !@is_piece_clicked
-        select_piece(rank, file)
-      elsif @clicked_piece
-        move_piece_or_capture(rank, file)
+      if @current_turn == :white
+        if !@is_piece_clicked
+          select_piece(rank, file)
+        elsif @clicked_piece
+          move_piece_or_capture(rank, file)
+        end
       end
     end
   end
   
   
   
-  # Clears previous selections and moves if necessary
-  def clear_previous_selection
-    @clicked_square.remove if @clicked_square
-    @overlap_square.remove if @overlap_square
-    @moves.each(&:remove)
-    @moves.clear
-  end
+
   
   # Selects a piece if one is found at the clicked square
   def select_piece(rank, file)
@@ -292,52 +327,46 @@ class Game
   
   # Attempts to move the piece or capture an opponent piece
   def move_piece_or_capture(rank, file)
+    return if not @clicked_piece # Check if a piece is clicked
+    
     target_move = [rank, file]
-
+  
     # Check if the target move is in the list of legal moves
-    if not @clicked_piece.moves.include?(target_move)
+    if not @clicked_piece.moves.include?(target_move) && @clicked_piece.color != "Black"
+
       handle_illegal_move
       reset_state_after_move
       return
     end
-  
+
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
     @illegal_state = false
   
     if target_piece
       if target_piece.color == @clicked_piece.color
         handle_illegal_move
+        generate_black_move if @clicked_piece.color == "Black"
       else
-        capture_piece(target_piece)   # Capture the piece and play the capture sound
-        move_piece(rank, file)        # Move the selected piece after the capture
+        #Capture
+        capture_piece(target_piece, rank, file)   
+        move_piece(rank, file)    
       end
     else
-      move_piece(rank, file)          # Normal move
+      move_piece(rank, file) # Normal move
     end
   
     reset_state_after_move unless @illegal_state
-  end
-  
-  
-  # Handles illegal move (e.g., trying to move to a square with a piece of the same color)
-  def handle_illegal_move
-    @sounds.illegal.play
-    @clicked_piece.moves.clear
-    @illegal_state = true
   end
   
   # Captures the opponent's piece
   def capture_piece(target_piece, rank, file)
     target_piece.render.remove
     target_piece.exist = false
-    # Move the clicked piece to the new coordinates
-    @clicked_piece.render.remove
-    @clicked_piece.x = rank * 80  # Update the x position
-    @clicked_piece.y = file * 80  # Update the y position
-    @clicked_piece.render_piece    # Re-render the piece in the new position
-    puts "Moved #{@clicked_piece.name} piece to (#{file}, #{rank})"
+    render_at_new_pos(rank, file)
+    puts "Captured #{@clicked_piece.name} piece"
     @sounds.capture.play
   end
+  
   
   # Moves the selected piece to the new square
   def move_piece(rank, file)
@@ -346,20 +375,42 @@ class Game
     # Draw the square indicating the piece has moved
     @overlap_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
     @overlap_square.color.opacity = 0.8
-  
-    # Move the clicked piece to the new coordinates
+    render_at_new_pos(rank, file)
+    puts "Moved #{@clicked_piece.name} piece to (#{file}, #{rank})"
+  end
+
+
+  # Move the clicked piece to the new coordinates
+  def render_at_new_pos(rank, file)
+    if @clicked_piece.color == "Black"
+     puts "Current Position: #{@clicked_piece.position} | New Position: (#{rank}, #{file})"
+
+    end
     @clicked_piece.render.remove
     @clicked_piece.x = rank * 80  # Update the x position
     @clicked_piece.y = file * 80  # Update the y position
     @clicked_piece.render_piece    # Re-render the piece in the new position
-  
-    puts "Moved #{@clicked_piece.name} piece to (#{file}, #{rank})"
   end
-  
+
+  # Clears previous selections and moves if necessary
+  def clear_previous_selection
+    @clicked_square.remove if @clicked_square
+    @overlap_square.remove if @overlap_square
+    @moves.each(&:remove)
+    @moves.clear
+  end
+
+  # Handles illegal move (e.g., trying to move to a square with a piece of the same color)
+  def handle_illegal_move
+    @sounds.illegal.play
+    @clicked_piece.moves.clear
+    @illegal_state = true
+  end
   # Resets the state after the move is completed
   def reset_state_after_move
     @is_piece_clicked = false
     @clicked_piece = nil
+    turn if @illegal_state == false
   end
   
   
