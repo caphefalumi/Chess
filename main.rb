@@ -147,13 +147,33 @@ class Piece
   end
   
   def pawn_moves
-    direction = @piece & PieceEval::WHITE > 0 ? -1 : 1 # White moves up, Black moves down
-    add_move_if_legal(@x/80, @y/80 + direction) # Forward move
-    # Add logic for capturing, double moves, etc.
+    direction = color == "White" ? -1 : 1 # White moves up (-1), Black moves down (1)
+    rank = @x / 80
+    file = @y / 80
+  
+    # Forward move (only if the square in front is empty)
+    front_square = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + direction) * 80 && p.exist }
+    add_move_if_legal(rank, file + direction) if front_square.nil?
+  
+    # Double forward move (if the pawn is on its starting rank and both squares are empty)
+    if color == "White" && file == 6  # White pawn on the 6th rank
+      two_squares_ahead = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + 2 * direction) * 80 && p.exist }
+      add_move_if_legal(rank, file + direction - 1) if front_square.nil? && two_squares_ahead.nil?
+    elsif color == "Black" && file == 1  # Black pawn on the 1st rank
+      two_squares_ahead = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + 2 * direction) * 80 && p.exist }
+      add_move_if_legal(rank, file + direction + 1) if front_square.nil? && two_squares_ahead.nil?
+    end
+  
+    left_target_piece = @game.pieces.find { |p| p.x == (rank - 1) * 80 && p.y == (file + direction) * 80 && p.exist }
+    right_target_piece = @game.pieces.find { |p| p.x == (rank + 1) * 80 && p.y == (file + direction) * 80 && p.exist }
+    add_move_if_legal(rank - 1, file + direction) if left_target_piece # Capture to the right
+    add_move_if_legal(rank + 1, file + direction) if right_target_piece # Capture to the left
   end
   
+  
+  
   def add_move_if_legal(new_x, new_y)
-    if new_x.between?(0, 7*80) && new_y.between?(0, 7*80) # Check within bounds
+    if new_x.between?(0, 6*80) && new_y.between?(0, 6*80) # Check within bounds
       target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 && p.exist }
       if target_piece.nil? # Legal if empty
         moves << [new_x, new_y] # Store legal move
@@ -225,6 +245,7 @@ class Game
     if @current_turn == :white
       @current_turn = :black
       generate_black_move
+
     else
       @current_turn = :white
     end
@@ -255,7 +276,7 @@ class Game
     Thread.new do
       sleep(1)  # Wait for 1 second
       # Store the piece and move
-      clear_previous_selection
+      clear_previous_selection(only_moves: false)
       @clicked_piece = piece_to_move
       move = piece_to_move.moves.sample
       puts "Black piece: #{@clicked_piece.name}"
@@ -265,17 +286,13 @@ class Game
       if @clicked_piece
         highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
         move_piece_or_capture(move[0], move[1])
-        
+      
         # Switch turns to white after AI move
         @current_turn = :white
-      else
-        puts "Clicked piece is no longer valid."
       end
+
     end
   end
-  
-  
-  
 
   def handle_mouse_click(mouse)
     rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
@@ -335,17 +352,17 @@ class Game
   # Attempts to move the piece or capture an opponent piece
   def move_piece_or_capture(rank, file)
     return if not @clicked_piece 
-
+  
     target_move = [rank, file]
   
     # Check if the target move is in the list of legal moves
     if not @clicked_piece.moves.include?(target_move)
-      clear_previous_selection
+      clear_previous_selection(only_moves: false)
       handle_illegal_move
       reset_state_after_move
       return
     end
-
+  
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
     @illegal_state = false
   
@@ -354,10 +371,18 @@ class Game
     elsif target_piece
       capture_piece(target_piece)
     end
+  
+    # Move the piece to the new location
     move_piece(rank, file)
+  
+    # **Immediately clear the possible moves after the piece is moved**
+    clear_previous_selection(only_moves: true)
+  
+    # Switch turns after clearing the possible moves
     turn
     reset_state_after_move
   end
+  
   
   # Captures the opponent's piece
   def capture_piece(target_piece)
@@ -371,8 +396,14 @@ class Game
   
   # Highlights the selected piece on the board
   def highlight_selected_piece(x, y)
+    # Clear the previous highlights before applying the new one
+    clear_previous_selection(only_moves: false)
+
     @clicked_square = Square.new(x: x, y: y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
     @clicked_square.color.opacity = 0.8
+    
+    # Draw valid move circles
+    draw_possible_moves(@clicked_piece)
   end
   # Move the selected piece to the new square
   def move_piece(rank, file)
@@ -395,26 +426,43 @@ class Game
   end
 
   # Clears previous selections and moves if necessary
-  def clear_previous_selection
-    
-    @target_square.remove if @target_square
-    @clicked_square.remove if @clicked_square
+  def clear_previous_selection(only_moves: true)
+    # Clear only the possible move circles (not square highlights) if only_moves is true
+    if !only_moves
+      @target_square&.remove
+      @clicked_square&.remove
+    end
     @moves.each(&:remove)
     @moves.clear
   end
 
-  # Handles illegal move (e.g., trying to move to a square with a piece of the same color)
+
   def handle_illegal_move
     @sounds.illegal.play
     @clicked_piece.moves.clear
+    highlight_illegal_move(@clicked_piece)  # New function to visually indicate the illegal move
     @illegal_state = true
   end
+  
+  # Highlight the illegal move visually
+  def highlight_illegal_move(piece)
+    # Flash the piece briefly in red or create another effect to show the illegal attempt
+    flash_square = Square.new(x: piece.x, y: piece.y, z: ZOrder::OVERLAP, size: 80, color: "red")
+    flash_square.color.opacity = 0.8
+  
+    # After a short delay, remove the red flash (simulating feedback)
+    Thread.new do
+      sleep(0.2)
+      flash_square.remove
+    end
+  end
+
   # Resets the state after the move is completed
   def reset_state_after_move
     @is_piece_clicked = false
     @clicked_piece = nil
-
-  end
+    clear_previous_selection(only_moves: true)
+  end 
   
   
 end
