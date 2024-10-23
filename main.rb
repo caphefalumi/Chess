@@ -75,11 +75,11 @@ class Piece
     color + piece_type if piece_type != "No Piece"
   end
 
-  def color()
+  def color
     @piece & (0b01000 | 0b10000) == 8 ? "White" : "Black"
   end
 
-  def piece_type()
+  def piece_type
     case @piece & 0b00111
     when PieceEval::KING   then "King"
     when PieceEval::QUEEN  then "Queen"
@@ -116,7 +116,6 @@ class Piece
   
   def sliding_moves(piece)
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
-  
     # Determine which direction indices to use based on the piece type
     directions_offsets = case piece
               when "Bishop"
@@ -294,6 +293,15 @@ class Game
     end
   end
 
+  def is_check? 
+    king = @pieces.find { |p| p.piece_type == "King"}
+    moves = @pieces.select { |piece| piece.exist }.flat_map do |piece|
+      piece.generate_moves
+      piece.moves
+    end
+    return moves.include?([king.x / 80, king.y / 80])
+  end
+
   def handle_mouse_click(mouse)
     rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
   
@@ -373,11 +381,14 @@ class Game
     end
   
     # Move the piece to the new location
+
     move_piece(rank, file)
   
+
     # **Immediately clear the possible moves after the piece is moved**
     clear_previous_selection(only_moves: true)
   
+    puts is_check?
     # Switch turns after clearing the possible moves
     turn
     reset_state_after_move
@@ -417,7 +428,7 @@ class Game
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
     if @clicked_piece.color == "Black"
-     puts "Current Position: #{@clicked_piece.position} | New Position: (#{rank}, #{file})"
+    puts "Current Position: #{@clicked_piece.position} | New Position: (#{rank}, #{file})"
     end
     @clicked_piece.render.remove
     @clicked_piece.x = rank * 80  # Update the x position
