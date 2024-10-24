@@ -178,25 +178,43 @@ class Piece
     direction = color == "White" ? -1 : 1 # White moves up (-1), Black moves down (1)
     rank = @x / 80
     file = @y / 80
-  
+    
     # Forward move (only if the square in front is empty)
     front_square = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + direction) * 80 && p.exist }
     add_move_if_legal(rank, file + direction) if front_square.nil?
-  
+    
     # Double forward move (if the pawn is on its starting rank and both squares are empty)
     if color == "White" && file == 6  # White pawn on the 6th rank
       two_squares_ahead = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + 2 * direction) * 80 && p.exist }
-      add_move_if_legal(rank, file + direction - 1) if front_square.nil? && two_squares_ahead.nil?
+      add_move_if_legal(rank, file + 2 * direction) if front_square.nil? && two_squares_ahead.nil?
+      @can_en_passant = true if front_square.nil? && two_squares_ahead.nil? # Mark en passant possible
     elsif color == "Black" && file == 1  # Black pawn on the 1st rank
       two_squares_ahead = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + 2 * direction) * 80 && p.exist }
-      add_move_if_legal(rank, file + direction + 1) if front_square.nil? && two_squares_ahead.nil?
+      add_move_if_legal(rank, file + 2 * direction) if front_square.nil? && two_squares_ahead.nil?
+      @can_en_passant = true if front_square.nil? && two_squares_ahead.nil? # Mark en passant possible
     end
-  
+    
+    # Capturing diagonally (normal captures)
     left_target_piece = @game.pieces.find { |p| p.x == (rank - 1) * 80 && p.y == (file + direction) * 80 && p.exist }
     right_target_piece = @game.pieces.find { |p| p.x == (rank + 1) * 80 && p.y == (file + direction) * 80 && p.exist }
-    add_move_if_legal(rank - 1, file + direction) if left_target_piece # Capture to the right
-    add_move_if_legal(rank + 1, file + direction) if right_target_piece # Capture to the left
+    add_move_if_legal(rank - 1, file + direction) if left_target_piece && left_target_piece.color != color
+    add_move_if_legal(rank + 1, file + direction) if right_target_piece && right_target_piece.color != color
+  
+    # En passant capture
+    if @game.last_move && @game.last_move.piece_type == "Pawn" && @can_en_passant
+      en_passant_left = @game.last_move if @game.last_move.x == (rank - 1) * 80 && @game.last_move.y == @y
+      en_passant_right = @game.last_move if @game.last_move.x == (rank + 1) * 80 && @game.last_move.y == @y
+      
+      if en_passant_left
+        add_move_if_legal(rank - 1, file + direction) # Add en passant move to the left
+      elsif en_passant_right
+        add_move_if_legal(rank + 1, file + direction) # Add en passant move to the right
+      end
+    end
   end
+  
+
+
   
   def promotion
     if (color == "White" && @y == 0) || (color == "Black" && @y == 7 * 80)
@@ -253,17 +271,17 @@ end
 
 
 class Game
-  attr_reader :sounds, :pieces, :squares, :board, :clicked_piece
+  attr_reader :pieces, :last_move
 
   def initialize
     @sounds = Sounds.new
     @pieces = []
     @squares = []
     @moves = []
+    @last_move = nil
+    @is_piece_clicked = false
     @current_turn =:white
     @board = initialize_board
-
-    @is_piece_clicked = false
 
     draw_board
   end
@@ -388,7 +406,7 @@ class Game
   
   # Selects a piece if one is found at the clicked square
   def select_piece(rank, file)
-    @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist && p.color == "White" }
+    @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
   
     if @clicked_piece
       @clicked_piece.generate_moves
@@ -430,7 +448,7 @@ class Game
   end
   # Move the selected piece to the new square
   
-  
+
   # Attempts to move the piece or capture an opponent piece
   def move_piece_or_capture(rank, file)
     return if not @clicked_piece  
@@ -454,12 +472,11 @@ class Game
       capture_flag = true
       capture_piece(target_piece)
     end
-  
-    # If the move is legal and doesn't result in check, proceed
+
+
+    
     move_piece(rank, file, capture_flag)
-    clear_previous_selection(only_moves: true)
-  
-    turn
+
     reset_state_after_move
   end
   
@@ -467,30 +484,30 @@ class Game
   def move_piece(rank, file, capture_flag)
     @target_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
     @target_square.color.opacity = 0.8
-    render_at_new_pos(rank, file)
     castle_flag = false
+    render_at_new_pos(rank, file)
 
     if @clicked_piece.piece_type == "King" && (rank == 6 || rank == 2) && @clicked_piece.can_castle # Castling
       castle(rank, file)
       castle_flag = true
-    end
-    if @clicked_piece.piece_type == "Pawn" && (file == 7 || file == 0)
+    elsif @clicked_piece.piece_type == "Pawn" && (file == 7 || file == 0)
       @clicked_piece.render.remove
       @clicked_piece.promotion
-
+    elsif @last_move && @clicked_piece.piece_type == "Pawn" && @last_move.piece_type == "Pawn"
+      if (@clicked_piece.x == @last_move.x && @clicked_piece.y + 80 == @last_move.y)
+        capture_piece(@last_move)
+        capture_flag = true
+      end
     end
     if !capture_flag && !castle_flag
       @sounds.move_self.play 
     end
-    
   end
 
   # Captures the opponent's piece
   def capture_piece(target_piece)
     target_piece.render.remove
     target_piece.exist = false
-    render_at_new_pos(target_piece.x/80, target_piece.y/80)
-
     @sounds.capture.play
   end
   
@@ -498,7 +515,6 @@ class Game
     rook_x = rank == 6 ? 7*80 : 0
     rook = @pieces.find { |p| p.piece_type == "Rook" && p.color == @clicked_piece.color && p.x == rook_x && p.is_moved == false }
     rook_new_x = rank == 6 ? 5 * 80 : 3 * 80
-    puts "Ok"
     if rook
       # Move rook to its new position
       rook.render.remove
@@ -511,6 +527,9 @@ class Game
 
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
+    if @last_move
+      puts @clicked_piece.name + " " + @last_move.name
+    end
     if @clicked_piece.piece_type == "King" && @clicked_piece.x == 4 * 80 && (rank == 6 || rank == 2)
       @clicked_piece.can_castle = true
     end
@@ -556,15 +575,16 @@ class Game
 
   # Resets the state after the move is completed
   def reset_state_after_move
+    @last_move = @clicked_piece
     @is_piece_clicked = false
     @clicked_piece = nil
+    turn
     clear_previous_selection(only_moves: true)
   end 
   
   
 end
 
-# Window settings
 set width: 640, height: 640
 
 # Initialize Game
