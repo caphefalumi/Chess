@@ -49,17 +49,17 @@ end
 
 # Class representing a Piece
 class Piece
-  attr_accessor :x, :y, :piece, :moves, :render, :exist
+  attr_accessor :x, :y, :piece, :moves, :render, :can_castle, :is_moved, :exist
 
   def initialize(x, y, piece, piece_image, game, exist = true)
     @x = x
     @y = y
     @piece = piece
     @piece_image = piece_image
-    @exist = exist
-    @rank = x / 80
-    @file = y / 80
     @moves = Array.new()
+    @is_moved = false
+    @can_castle = false
+    @exist = exist
     @game = game
   end
 
@@ -105,32 +105,61 @@ class Piece
     end
   end
   
+  # Castling conditions
   def king_moves
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx, dy|
-      new_x = @x/80 + dx
-      new_y = @y/80 + dy
+      new_x = @x / 80 + dx
+      new_y = @y / 80 + dy
       add_move_if_legal(new_x, new_y)
+    end
+  
+    # Castling conditions
+    if !is_moved 
+      # King-side castling
+      king_side_rook = @game.pieces.find { |p| p.piece_type == "Rook" && !p.is_moved && p.color == color && p.x == 7 * 80 }
+      if king_side_rook && no_pieces_between(king_side_rook)
+
+        add_move_if_legal(6, @y / 80)  # Target position for king-side castling
+      end
+  
+      # Queen-side castling
+      queen_side_rook = @game.pieces.find { |p| p.piece_type == "Rook" && !p.is_moved && p.color == color && p.x == 0 }
+      if queen_side_rook && no_pieces_between(queen_side_rook)
+        
+        add_move_if_legal(2, @y / 80)  # Target position for queen-side castling
+      end
     end
   end
   
-  def sliding_moves(piece)
-    directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
-    # Determine which direction indices to use based on the piece type
-    directions_offsets = case piece
-              when "Bishop"
-                (4..7).to_a  # Diagonal directions
-              when "Rook"
-                (0..3).to_a  # Straight directions
-              when "Queen"
-                (0..7).to_a  # All directions
-              end
+  def no_pieces_between(rook)
+    king_file = @x / 80
+    rook_file = rook.x / 80
   
-    directions_offsets.each do |i|
-      x, y = @x/80, @y/80
+    if rook_file < king_file  # Rook is on the left (queen-side)
+      (rook_file + 1...king_file).none? do |file| 
+        @game.pieces.find { |p| p.x == file * 80 && p.y == @y && p.exist }
+      end
+    else  # Rook is on the right (king-side)
+      (king_file + 1...rook_file).none? do |file|
+        @game.pieces.find { |p| p.x == file * 80 && p.y == @y && p.exist }
+      end
+    end
+  end
+  
+  
+  def sliding_moves(piece)
+    directions = {
+      "Rook"   => [[1, 0], [-1, 0], [0, 1], [0, -1]], # Horizontal/Vertical
+      "Bishop" => [[1, 1], [-1, -1], [1, -1], [-1, 1]], # Diagonal
+      "Queen"  => [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] # All directions
+    }
+  
+    directions[piece].each do |dx, dy|  # Unpack direction array into dx and dy
+      x, y = @x / 80, @y / 80
       loop do
-        x += directions[i][0]
-        y += directions[i][1]
+        x += dx   # Add dx for horizontal/vertical change
+        y += dy   # Add dy for diagonal or vertical change
         break unless add_move_if_legal(x, y)
       end
     end
@@ -169,10 +198,46 @@ class Piece
     add_move_if_legal(rank + 1, file + direction) if right_target_piece # Capture to the left
   end
   
-  
+  def promotion
+    if (color == "White" && @y == 0) || (color == "Black" && @y == 7 * 80)
+      promotion_menu
+    end
+  end
+
+  def promotion_menu
+    puts "Pawn promotion! Choose a piece to promote to:"
+    puts "1. Queen"
+    puts "2. Rook"
+    puts "3. Bishop"
+    puts "4. Knight"
+
+    choice = gets.chomp.to_i
+
+    new_piece_type = case choice
+    when 1
+      PieceEval::QUEEN
+    when 2
+      PieceEval::ROOK
+    when 3
+      PieceEval::BISHOP
+    when 4
+      PieceEval::KNIGHT
+    else
+      PieceEval::QUEEN  # Default to queen if invalid input
+    end
+    promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK))
+
+  end
+
+  def promote(new_piece_type)
+    @piece = new_piece_type
+    @piece_image = piece_image(@piece)
+    render_piece
+    puts "#{color} pawn promoted to #{piece_type}!"
+  end
   
   def add_move_if_legal(new_x, new_y)
-    if new_x.between?(0, 6*80) && new_y.between?(0, 6*80) # Check within bounds
+    if new_x.between?(0, 7) && new_y.between?(0, 7) # Check within bounds
       target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 && p.exist }
       if target_piece.nil? # Legal if empty
         moves << [new_x, new_y] # Store legal move
@@ -251,9 +316,7 @@ class Game
   end
   
   # Generates a random legal move for black
-  def generate_black_move
-    puts "Generating black move..."
-  
+  def generate_black_move  
     black_pieces = @pieces.select { |p| p.color == "Black" && p.exist }
     return if black_pieces.empty?
   
@@ -325,15 +388,13 @@ class Game
   
   # Selects a piece if one is found at the clicked square
   def select_piece(rank, file)
-    @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
+    @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist && p.color == "White" }
   
     if @clicked_piece
       @clicked_piece.generate_moves
-
       draw_possible_moves(@clicked_piece)
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
       @is_piece_clicked = true
-      puts "Clicked #{@clicked_piece.name}"
     end
   end
   
@@ -355,11 +416,24 @@ class Game
     end
   end
   
+  
+  # Highlights the selected piece on the board
+  def highlight_selected_piece(x, y)
+    # Clear the previous highlights before applying the new one
+    clear_previous_selection(only_moves: false)
 
+    @clicked_square = Square.new(x: x, y: y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+    @clicked_square.color.opacity = 0.8
+    
+    # Draw valid move circles
+    draw_possible_moves(@clicked_piece)
+  end
+  # Move the selected piece to the new square
+  
   
   # Attempts to move the piece or capture an opponent piece
   def move_piece_or_capture(rank, file)
-    return if not @clicked_piece 
+    return if not @clicked_piece  
   
     target_move = [rank, file]
   
@@ -377,63 +451,75 @@ class Game
     if target_piece && target_piece.color == @clicked_piece.color
       handle_illegal_move
     elsif target_piece
+      capture_flag = true
       capture_piece(target_piece)
     end
   
-    # Move the piece to the new location
-
-    move_piece(rank, file)
-  
-
-    # **Immediately clear the possible moves after the piece is moved**
+    # If the move is legal and doesn't result in check, proceed
+    move_piece(rank, file, capture_flag)
     clear_previous_selection(only_moves: true)
   
-    puts is_check?
-    # Switch turns after clearing the possible moves
     turn
     reset_state_after_move
   end
   
   
+  def move_piece(rank, file, capture_flag)
+    @target_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+    @target_square.color.opacity = 0.8
+    render_at_new_pos(rank, file)
+    castle_flag = false
+
+    if @clicked_piece.piece_type == "King" && (rank == 6 || rank == 2) && @clicked_piece.can_castle # Castling
+      castle(rank, file)
+      castle_flag = true
+    end
+    if @clicked_piece.piece_type == "Pawn" && (file == 7 || file == 0)
+      @clicked_piece.render.remove
+      @clicked_piece.promotion
+
+    end
+    if !capture_flag && !castle_flag
+      @sounds.move_self.play 
+    end
+    
+  end
+
   # Captures the opponent's piece
   def capture_piece(target_piece)
     target_piece.render.remove
     target_piece.exist = false
     render_at_new_pos(target_piece.x/80, target_piece.y/80)
-    puts "Captured #{@clicked_piece.name} piece"
+
     @sounds.capture.play
   end
   
-  
-  # Highlights the selected piece on the board
-  def highlight_selected_piece(x, y)
-    # Clear the previous highlights before applying the new one
-    clear_previous_selection(only_moves: false)
-
-    @clicked_square = Square.new(x: x, y: y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
-    @clicked_square.color.opacity = 0.8
-    
-    # Draw valid move circles
-    draw_possible_moves(@clicked_piece)
+  def castle(rank, file)
+    rook_x = rank == 6 ? 7*80 : 0
+    rook = @pieces.find { |p| p.piece_type == "Rook" && p.color == @clicked_piece.color && p.x == rook_x && p.is_moved == false }
+    rook_new_x = rank == 6 ? 5 * 80 : 3 * 80
+    puts "Ok"
+    if rook
+      # Move rook to its new position
+      rook.render.remove
+      rook.x = rook_new_x
+      rook.render_piece
+      rook.is_moved = true  # Mark the rook as moved
+      @sounds.castle.play
+    end
   end
-  # Move the selected piece to the new square
-  def move_piece(rank, file)
-    @sounds.move_self.play
-    @target_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
-    @target_square.color.opacity = 0.8
-    render_at_new_pos(rank, file)
-  end
-
 
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
-    if @clicked_piece.color == "Black"
-    puts "Current Position: #{@clicked_piece.position} | New Position: (#{rank}, #{file})"
+    if @clicked_piece.piece_type == "King" && @clicked_piece.x == 4 * 80 && (rank == 6 || rank == 2)
+      @clicked_piece.can_castle = true
     end
+    @clicked_piece.is_moved = true
     @clicked_piece.render.remove
     @clicked_piece.x = rank * 80  # Update the x position
     @clicked_piece.y = file * 80  # Update the y position
     @clicked_piece.render_piece    # Re-render the piece in the new position
+
   end
 
   # Clears previous selections and moves if necessary
