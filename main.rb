@@ -327,7 +327,6 @@ class Game
     if @current_turn == :white
       @current_turn = :black
       generate_black_move
-
     else
       @current_turn = :white
     end
@@ -385,6 +384,7 @@ class Game
 
   def handle_mouse_click(mouse)
     rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
+    puts "#{rank} #{file }"
   
     case mouse.button
     when :left
@@ -407,7 +407,6 @@ class Game
   # Selects a piece if one is found at the clicked square
   def select_piece(rank, file)
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
-  
     if @clicked_piece
       @clicked_piece.generate_moves
       draw_possible_moves(@clicked_piece)
@@ -463,45 +462,49 @@ class Game
       return
     end
   
+
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
-    @illegal_state = false
-  
+    move_piece(rank, file)
+
     if target_piece && target_piece.color == @clicked_piece.color
       handle_illegal_move
+
     elsif target_piece
-      capture_flag = true
       capture_piece(target_piece)
     end
 
-
     
-    move_piece(rank, file, capture_flag)
-
+    turn
     reset_state_after_move
   end
   
   
-  def move_piece(rank, file, capture_flag)
+  def move_piece(rank, file, capture_flag=false)
     @target_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
     @target_square.color.opacity = 0.8
     castle_flag = false
+    start_x = @clicked_piece.x
+    start_y = @clicked_piece.y
     render_at_new_pos(rank, file)
 
-    if @clicked_piece.piece_type == "King" && (rank == 6 || rank == 2) && @clicked_piece.can_castle # Castling
+    # Castle
+    if @clicked_piece.piece_type == "King" && (rank == 6 || rank == 2) && @clicked_piece.can_castle
       castle(rank, file)
       castle_flag = true
+    # Promotion
     elsif @clicked_piece.piece_type == "Pawn" && (file == 7 || file == 0)
       @clicked_piece.render.remove
       @clicked_piece.promotion
+    # En passant
     elsif @last_move && @clicked_piece.piece_type == "Pawn" && @last_move.piece_type == "Pawn"
-      if (@clicked_piece.x == @last_move.x && @clicked_piece.y + 80 == @last_move.y)
+      if (start_x + 80 == @clicked_piece.x || start_x - 80 == @clicked_piece.x) && ((start_y + 80 == @clicked_piece.y && @clicked_piece.color == "Black") || (start_y - 80 == @clicked_piece.y && @clicked_piece.color == "White"))
         capture_piece(@last_move)
-        capture_flag = true
       end
     end
-    if !capture_flag && !castle_flag
+    if !castle_flag && !capture_flag
       @sounds.move_self.play 
     end
+
   end
 
   # Captures the opponent's piece
@@ -578,7 +581,6 @@ class Game
     @last_move = @clicked_piece
     @is_piece_clicked = false
     @clicked_piece = nil
-    turn
     clear_previous_selection(only_moves: true)
   end 
   
