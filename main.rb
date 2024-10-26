@@ -7,7 +7,7 @@ module ZOrder
 end
 
 class Sounds
-  attr_accessor :capture, :castle, :illegal, :move_check, :move_self, :move_opponent, :game_start, :game_end
+  attr_accessor :capture, :castle, :illegal, :move_check, :move_self, :move_opponent, :promote, :game_start, :game_end
 
   def initialize
     @capture = Music.new("sounds/capture.mp3")
@@ -18,6 +18,8 @@ class Sounds
     @move_opponent = Music.new("sounds/move_opponent.mp3")
     @game_start = Music.new("sounds/game_start.mp3")
     @game_end = Music.new("sounds/game_end.mp3")
+    @promote = Music.new("sounds/promote.mp3")
+
   end
 end
 
@@ -135,7 +137,7 @@ class Game
   
       if @promotion
         select_promotion_menu(mouse.x, mouse.y)
-      else @current_turn == :white
+      elsif @current_turn == :white
         if !@is_piece_clicked
           select_piece(rank, file)
         elsif @clicked_piece
@@ -266,14 +268,17 @@ class Game
         @clicked_piece.promotion(selected_type)
         @promotion_options.each { |opt| opt[0].remove }
         @promotion_options.clear
-        @promotion_menu.remove
+        @promotion_menu_rect.remove
+        @promotion = false
+        @sounds.promote.play
         break
       end
     end
   end
   def promotion_menu()
-    @promotion_menu_rect = Rectangle.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::PROMOTION, width: 80, height: 340, color: 'gray')
-    %w[queen rook bishop knight].each_with_index do |piece_type, i|
+    @promotion_options = Array.new()
+    @promotion_menu_rect = Rectangle.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::PROMOTION, width: 80, height: 320, color: 'gray')
+    %w[Queen Rook Bishop Night].each_with_index do |piece_type, i|
       piece_image = Image.new("pieces/#{@current_turn[0]}#{piece_type[0]}.png", x: @clicked_piece.x, y: @clicked_piece.y + i * 80, width: 80, height: 80, z: 5)
       @promotion_options << [piece_image, piece_type]
     end
@@ -357,7 +362,7 @@ class Game
   # Resets the state after the move is completed
   def reset_state_after_move
     @is_piece_clicked = false
-    @clicked_piece = nil
+    
     clear_previous_selection(only_moves: true)
   end 
   

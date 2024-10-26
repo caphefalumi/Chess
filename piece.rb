@@ -195,13 +195,13 @@ class Piece
 
 
     new_piece_type = case choice
-    when 1
+    when "Queen"
       PieceEval::QUEEN
-    when 2
+    when "Rook"
       PieceEval::ROOK
-    when 3
+    when "Bishop"
       PieceEval::BISHOP
-    when 4
+    when "Night"
       PieceEval::KNIGHT
     else
       PieceEval::QUEEN  # Default to queen if invalid input
