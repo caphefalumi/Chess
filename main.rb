@@ -58,9 +58,10 @@ class Game
     @pieces = []
     @squares = []
     @moves = []
-    @last_move = nil
-    @is_piece_clicked = false
     @clicked_piece = nil
+    @last_move = nil
+    @promotion = false
+    @is_piece_clicked = false
     @current_turn =:white
     @board = initialize_board
     @engine = Engine.new(self)
@@ -132,13 +133,16 @@ class Game
       # Reset the illegal state if a piece is clicked, and allow new selection
       @illegal_state = false if @clicked_piece && @illegal_state
   
-      if @current_turn == :white
+      if @promotion
+        select_promotion_menu(mouse.x, mouse.y)
+      else @current_turn == :white
         if !@is_piece_clicked
           select_piece(rank, file)
         elsif @clicked_piece
           move_piece_or_capture(rank, file)
         end
       end
+      
     end
   end
   
@@ -205,7 +209,6 @@ class Game
       capture_piece(target_piece)
     end
 
-    
     turn
     reset_state_after_move
   end
@@ -221,7 +224,6 @@ class Game
     start_y = @clicked_piece.y
     render_at_new_pos(rank, file)
     if @clicked_piece.type == "Pawn" && ((start_y + 160 == @clicked_piece.y && @clicked_piece.color == "Black") || (start_y - 160 == @clicked_piece.y && @clicked_piece.color == "White"))
-      puts "OKKKK"
       @clicked_piece.can_en_passant = true
     end
 
@@ -232,11 +234,8 @@ class Game
     # Promotion
     elsif @clicked_piece.type == "Pawn" && (file == 7 || file == 0)
       promotion_menu
-  
 
     # En passant
-      
-
     elsif @last_move && @clicked_piece.type == "Pawn" && @last_move.type == "Pawn"
       if (start_x + 80 == @clicked_piece.x || start_x - 80 == @clicked_piece.x) && ((start_y + 80 == @clicked_piece.y && @clicked_piece.color == "Black") || (start_y - 80 == @clicked_piece.y && @clicked_piece.color == "White"))
         
@@ -256,16 +255,31 @@ class Game
     target_piece.exist = false
     @sounds.capture.play
   end
+
+  def select_promotion_menu(mouse_x, mouse_y)
+    for i in 0..3
+      image = @promotion_options[i][0]
+      if (mouse_x >= image.x && mouse_x <= image.x + image.width) &&
+        (mouse_y >= image.y && mouse_y <= image.y + image.height)
+        selected_type = @promotion_options[i][1]
+        @clicked_piece.render.remove
+        @clicked_piece.promotion(selected_type)
+        @promotion_options.each { |opt| opt[0].remove }
+        @promotion_options.clear
+        @promotion_menu.remove
+        break
+      end
+    end
+  end
   def promotion_menu()
-    @promotion_menu = Rectangle.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::PROMOTION, width: 80, height: 340, color: 'white')
-    @promotion_options = []
+    @promotion_menu_rect = Rectangle.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::PROMOTION, width: 80, height: 340, color: 'gray')
     %w[queen rook bishop knight].each_with_index do |piece_type, i|
       piece_image = Image.new("pieces/#{@current_turn[0]}#{piece_type[0]}.png", x: @clicked_piece.x, y: @clicked_piece.y + i * 80, width: 80, height: 80, z: 5)
-      @promotion_options << { image: piece_image, type: piece_type }
+      @promotion_options << [piece_image, piece_type]
     end
-    @clicked_piece.render.remove
-    @clicked_piece.promotion(@promotion_options[1])
+    @promotion = true
   end
+
   def castle(rank, file)
     rook_x = rank == 6 ? 7*80 : 0
     rook = @pieces.find { |p| p.type == "Rook" && p.color == @clicked_piece.color && p.x == rook_x && p.is_moved == false && p.exist}
