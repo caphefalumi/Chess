@@ -2,18 +2,18 @@ require 'rubygems'
 require 'ruby2d'
 
 class Piece
-  attr_accessor :x, :y, :piece, :moves, :render, :can_castle, :can_en_passant, :is_moved, :is_checked, :exist
+  attr_accessor :x, :y, :piece, :moves, :render, :is_board, :can_castle, :can_en_passant, :is_moved, :is_checked
 
-  def initialize(x, y, piece, piece_image, game, exist = true)
+  def initialize(x, y, piece, piece_image, game)
     @x = x
     @y = y
     @piece = piece
     @piece_image = piece_image
     @moves = Array.new()
     @is_moved = false
+    @is_board = false
     @is_checked = true
     @can_en_passant = false
-    @exist = exist
     @game = game
   end
 
@@ -41,7 +41,7 @@ class Piece
     when PieceEval::BISHOP then "Bishop"
     when PieceEval::KNIGHT then "Knight"
     when PieceEval::PAWN   then "Pawn"
-    else "No Piece"
+    else "None"
     end
   end
 
@@ -61,7 +61,7 @@ class Piece
   
   # Castling conditions
   def king_moves
-    king = @game.pieces.find { |p| p.type == "King" && p.exist  }
+    king = @game.pieces.find_all { |p| p.type == "King" }
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx, dy|
       new_x = @x / 80 + dx
@@ -75,14 +75,14 @@ class Piece
     # Castling conditions
     if !is_moved 
       # King-side castling
-      king_side_rook = @game.pieces.find { |p| p.type == "Rook" && !p.is_moved && p.color == color && p.x == 7 * 80 && p.exist }
+      king_side_rook = @game.pieces.find { |p| p.type == "Rook" && !p.is_moved && p.color == color && p.x == 7 * 80 }
       if king_side_rook && no_pieces_between(king_side_rook)
 
         add_move_if_legal(6, @y / 80)  # Target position for king-side castling
       end
   
       # Queen-side castling
-      queen_side_rook = @game.pieces.find { |p| p.type == "Rook" && !p.is_moved && p.color == color && p.x == 0 && p.exist }
+      queen_side_rook = @game.pieces.find { |p| p.type == "Rook" && !p.is_moved && p.color == color && p.x == 0 }
       if queen_side_rook && no_pieces_between(queen_side_rook)
         
         add_move_if_legal(2, @y / 80)  # Target position for queen-side castling
@@ -92,14 +92,15 @@ class Piece
   
   def is_checked?(king, x, y)
     # Locate both kings' current positions
-    return false unless king && king.type != "king" # Ensure both kings are present on the board
+    return false unless king
 
+    idx =  @current_turn == :white ? 1 : 0
     king_position = [x, y]
     @game.pieces.each do |piece|
-      next unless piece.exist && piece.type != "King" && piece.color == king.color  # Skip captured pieces
+      next unless piece.type != "King" && piece.color == king[idx].color  # Skip captured pieces
       
       if piece.type == "Pawn"
-        piece.generate_moves(true)
+        piece.generate_moves(bot = true)
       else 
         piece.generate_moves # Generate legal moves for the piece
       end
@@ -115,11 +116,11 @@ class Piece
   
     if rook_file < king_file  # Rook is on the left (queen-side)
       (rook_file + 1...king_file).none? do |file| 
-        @game.pieces.find { |p| p.x == file * 80 && p.y == @y && p.exist }
+        @game.pieces.find { |p| p.x == file * 80 && p.y == @y }
       end
     else  # Rook is on the right (king-side)
       (king_file + 1...rook_file).none? do |file|
-        @game.pieces.find { |p| p.x == file * 80 && p.y == @y && p.exist }
+        @game.pieces.find { |p| p.x == file * 80 && p.y == @y }
       end
     end
   end
@@ -157,18 +158,18 @@ class Piece
     file = @y / 80
     
     # Forward move (only if the square in front is empty)
-    front_square = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + direction) * 80 && p.exist }
+    front_square = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + direction) * 80 }
     add_move_if_legal(rank, file + direction) if front_square.nil?
     
     # Double forward move (if the pawn is on its starting rank and both squares are empty)
     if (color == "White" && file == 6) || (color == "Black" && file == 1)  # White pawn on the 6th rank
-      two_squares_ahead = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + 2 * direction) * 80 && p.exist }
+      two_squares_ahead = @game.pieces.find { |p| p.x == rank * 80 && p.y == (file + 2 * direction) * 80 }
       add_move_if_legal(rank, file + 2 * direction) if front_square.nil? && two_squares_ahead.nil?
     end
     
     # Capturing diagonally (normal captures)
-    left_target_piece = @game.pieces.find { |p| p.x == (rank - 1) * 80 && p.y == (file + direction) * 80 && p.exist }
-    right_target_piece = @game.pieces.find { |p| p.x == (rank + 1) * 80 && p.y == (file + direction) * 80 && p.exist }
+    left_target_piece = @game.pieces.find { |p| p.x == (rank - 1) * 80 && p.y == (file + direction) * 80 }
+    right_target_piece = @game.pieces.find { |p| p.x == (rank + 1) * 80 && p.y == (file + direction) * 80 }
     add_move_if_legal(rank - 1, file + direction) if (left_target_piece && left_target_piece.color != color) || bot
     add_move_if_legal(rank + 1, file + direction) if (right_target_piece && right_target_piece.color != color) || bot
   
@@ -219,7 +220,7 @@ class Piece
   
   def add_move_if_legal(new_x, new_y)
     if new_x.between?(0, 7) && new_y.between?(0, 7) # Check within bounds
-      target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 && p.exist }
+      target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 }
       if target_piece.nil? # Legal if empty
         moves << [new_x, new_y] # Store legal move
         return true

@@ -22,7 +22,7 @@ class Engine
   end
   # Generates a random legal move for black
   def random
-    black_pieces = game.pieces.select { |p| p.color == "Black" && p.exist }
+    black_pieces = game.pieces.select { |p| p.color == "Black" }
     return if black_pieces.empty?
 
     # Select a random black piece

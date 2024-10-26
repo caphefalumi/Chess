@@ -105,29 +105,11 @@ class Game
         @sounds.game_start.play
       end
     end
-    
   end
-  
-  def reset_board
-    @pieces.each do |piece|
-      piece.render.remove
-      piece.exist = false
-    end
-    @clicked_square.remove
-    @target_square.remove
-    @moves.clear
-    @last_move = nil
-    @is_piece_clicked = false
-    @pieces.clear
-    @current_turn = :white
-    draw_board
-  end
-
-
 
   def handle_mouse_click(mouse)
     rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
-  
+    
     case mouse.button
     when :left
       clear_previous_selection if @clicked_square && (@target_square || @illegal_state)
@@ -144,22 +126,22 @@ class Game
           move_piece_or_capture(rank, file)
         end
       end
-      
     end
   end
   
   def turn
     @last_move = @clicked_piece
-    # if @current_turn == :white
-    #   @current_turn = :black
-    #   @engine.random
-    # else
-    #   @current_turn = :white
-    # end
+    if @current_turn == :white
+      @current_turn = :black
+      @engine.random
+    else
+      @current_turn = :white
+    end
   end
+
   # Selects a piece if one is found at the clicked square
   def select_piece(rank, file)
-    @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
+    @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     if @clicked_piece
       @clicked_piece.generate_moves
       draw_possible_moves(@clicked_piece)
@@ -172,7 +154,7 @@ class Game
   def draw_possible_moves(piece)
     piece.moves.each do |move|
       move_circle = Circle.new(x: move[0] * 80 + 40, y: move[1] * 80 + 40, radius: 10, color: 'black', z: ZOrder::OVERLAP)
-      target_piece_square = @pieces.find { |p| p.x == move[0] * 80 && p.y == move[1] * 80 && p.exist }
+      target_piece_square = @pieces.find { |p| p.x == move[0] * 80 && p.y == move[1] * 80 }
   
       if target_piece_square
         move_circle.radius = 15
@@ -200,8 +182,7 @@ class Game
       return
     end
   
-
-    target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 && p.exist }
+    target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     move_piece(rank, file)
 
     if target_piece && target_piece.color == @clicked_piece.color
@@ -211,7 +192,7 @@ class Game
       capture_piece(target_piece)
     end
 
-    turn
+    turn if !@promotion
     reset_state_after_move
   end
   
@@ -221,14 +202,16 @@ class Game
     @target_square.color.opacity = 0.8
     castle_flag = false
     capture_flag = false
+    promotion_flag = false
     en_passant_flag = false
     start_x = @clicked_piece.x
     start_y = @clicked_piece.y
     render_at_new_pos(rank, file)
     if @clicked_piece.type == "Pawn" && ((start_y + 160 == @clicked_piece.y && @clicked_piece.color == "Black") || (start_y - 160 == @clicked_piece.y && @clicked_piece.color == "White"))
       @clicked_piece.can_en_passant = true
+    elsif @clicked_piece.type == "King" && start_x == 4 * 80 && (rank == 6 || rank == 2)
+      @clicked_piece.can_castle = true
     end
-
     # Castle
     if @clicked_piece.type == "King" && (rank == 6 || rank == 2) && @clicked_piece.can_castle
       castle(rank, file)
@@ -236,16 +219,16 @@ class Game
     # Promotion
     elsif @clicked_piece.type == "Pawn" && (file == 7 || file == 0)
       promotion_menu
-
+      promotion_flag = true
     # En passant
-    elsif @last_move && @clicked_piece.type == "Pawn" && @last_move.type == "Pawn"
+    elsif @last_move && @clicked_piece.type == "Pawn" && @last_move.type == "Pawn" && @last_move.can_en_passant
       if (start_x + 80 == @clicked_piece.x || start_x - 80 == @clicked_piece.x) && ((start_y + 80 == @clicked_piece.y && @clicked_piece.color == "Black") || (start_y - 80 == @clicked_piece.y && @clicked_piece.color == "White"))
         
         capture_piece(@last_move)
         en_passant_flag = true
       end
     end
-    if !castle_flag && !capture_flag && !en_passant_flag
+    if !castle_flag && !capture_flag && !promotion_flag && !en_passant_flag
       @sounds.move_self.play 
     end
 
@@ -254,8 +237,19 @@ class Game
   # Captures the opponent's piece
   def capture_piece(target_piece)
     target_piece.render.remove
-    target_piece.exist = false
+    @pieces.delete(target_piece)
     @sounds.capture.play
+    puts @pieces.size.to_i
+  end
+
+  def promotion_menu()
+    @promotion_options = Array.new()
+    @promotion_menu_rect = Rectangle.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::PROMOTION, width: 80, height: 320, color: 'gray')
+    %w[Queen Rook Bishop Night].each_with_index do |piece_type, i|
+      piece_image = Image.new("pieces/#{@current_turn[0]}#{piece_type[0]}.png", x: @clicked_piece.x, y: @clicked_piece.y + i * 80, width: 80, height: 80, z: 5)
+      @promotion_options << [piece_image, piece_type]
+    end
+    @promotion = true
   end
 
   def select_promotion_menu(mouse_x, mouse_y)
@@ -271,23 +265,15 @@ class Game
         @promotion_menu_rect.remove
         @promotion = false
         @sounds.promote.play
+        turn
         break
       end
     end
   end
-  def promotion_menu()
-    @promotion_options = Array.new()
-    @promotion_menu_rect = Rectangle.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::PROMOTION, width: 80, height: 320, color: 'gray')
-    %w[Queen Rook Bishop Night].each_with_index do |piece_type, i|
-      piece_image = Image.new("pieces/#{@current_turn[0]}#{piece_type[0]}.png", x: @clicked_piece.x, y: @clicked_piece.y + i * 80, width: 80, height: 80, z: 5)
-      @promotion_options << [piece_image, piece_type]
-    end
-    @promotion = true
-  end
 
   def castle(rank, file)
     rook_x = rank == 6 ? 7*80 : 0
-    rook = @pieces.find { |p| p.type == "Rook" && p.color == @clicked_piece.color && p.x == rook_x && p.is_moved == false && p.exist}
+    rook = @pieces.find { |p| p.type == "Rook" && p.color == @clicked_piece.color && p.x == rook_x && p.is_moved == false}
     rook_new_x = rank == 6 ? 5 * 80 : 3 * 80
     if rook
       # Move rook to its new position
@@ -307,15 +293,11 @@ class Game
   end
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
-    if @clicked_piece.type == "King" && @clicked_piece.x == 4 * 80 && (rank == 6 || rank == 2)
-      @clicked_piece.can_castle = true
-    end
     @clicked_piece.is_moved = true
     @clicked_piece.render.remove
-    @clicked_piece.x = rank * 80  # Update the x position
-    @clicked_piece.y = file * 80  # Update the y position
-    @clicked_piece.render_piece    # Re-render the piece in the new position
-
+    @clicked_piece.x = rank * 80 
+    @clicked_piece.y = file * 80
+    @clicked_piece.render_piece
   end
 
 
@@ -332,6 +314,7 @@ class Game
       flash_square.remove
     end
   end
+
   # Highlights the selected piece on the board
   def highlight_selected_piece(x, y)
     clear_previous_selection(only_moves: false)
@@ -345,7 +328,7 @@ class Game
   def handle_illegal_move
     @sounds.illegal.play
     @clicked_piece.moves.clear
-    highlight_illegal_move(@clicked_piece)  # New function to visually indicate the illegal move
+    highlight_illegal_move(@clicked_piece)
     @illegal_state = true
   end
 
@@ -359,15 +342,29 @@ class Game
     @moves.each(&:remove)
     @moves.clear
   end
+
   # Resets the state after the move is completed
   def reset_state_after_move
     @is_piece_clicked = false
-    
     clear_previous_selection(only_moves: true)
   end 
-  
-  
-end
+
+  def reset_board
+  @pieces.each do |piece,index|
+    piece.render.remove
+    @pieces.delete_at(index)
+  end
+  @clicked_square.remove
+  @target_square.remove
+  @moves.clear
+  @last_move = nil
+  @is_piece_clicked = false
+  @pieces.clear
+  @current_turn = :white
+  draw_board
+  end
+
+end 
 
 set width: 640, height: 640
 
