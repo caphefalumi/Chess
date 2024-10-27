@@ -137,6 +137,7 @@ class Game
     else
       @current_turn = :white
     end
+
   end
 
   # Selects a piece if one is found at the clicked square
@@ -288,7 +289,6 @@ class Game
   def in_checked?(color)
     king = @pieces.find{ |p| p.type == "King" && p.color == color }
     if king.is_checked?(king, king.x, king.y)
-
     end
   end
   # Move the clicked piece to the new coordinates

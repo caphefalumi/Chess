@@ -1,2 +1,3 @@
-def be_chuot():
-    print("Anh gau yeu be chuot")
+gene = "Be chuot"
+print(gene + "gene")
+input
