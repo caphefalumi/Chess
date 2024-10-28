@@ -1,3 +1,2 @@
-gene = "Be chuot"
-print(gene + "gene")
-input
+gene = input("Ten cua be chuot: ")
+print(gene + "Be")
