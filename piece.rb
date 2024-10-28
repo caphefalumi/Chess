@@ -2,12 +2,12 @@ require 'rubygems'
 require 'ruby2d'
 require 'set'
 class Piece
-  attr_accessor :x, :y, :piece, :bot, :moves, :render, :king_color, :is_board, :can_castle, :can_en_passant, :is_moved, :is_checked
+  attr_accessor :x, :y, :piece, :bot, :position, :moves, :render, :king_color, :is_board, :can_castle, :can_en_passant, :is_moved, :is_checked
 
   def initialize(x, y, piece, piece_image, game)
     @x, @y, @piece, @piece_image, @game = x, y, piece, piece_image, game
     @moves = []
-    @cached_moves = nil
+    @cached_moves = Set.new()
     @bot = false
     @king_color = "White"
     @is_moved = false
@@ -52,11 +52,11 @@ class Piece
     when "Knight"  then knight_moves
     when "Pawn"    then pawn_moves
     end
-    @cached_moves = @moves.dup
+
   end
 
   def generate_attack_moves 
-    if @king_color != color && @cached_moves.empty?
+    if @king_color != color
       generate_moves
     end
   end
@@ -73,22 +73,44 @@ class Piece
       add_move_if_legal(2, @y / 80) if queen_side_rook && no_pieces_between(queen_side_rook)
     end
   end
-
-  def is_checked?(dx, dy)
+  def is_checked?(dx = @x / 80, dy = @y / 80, p_color = color)
     king_position = [dx, dy]
+    @cached_moves.clear # Clear the cache each time `is_checked?` is called
     @game.pieces.each do |piece|
-      next if piece.color == color && piece != @piece
+      next if piece.color == p_color # Only consider opponent pieces
       generate_bot_moves(piece)
-      piece.moves.each do |dx, dy|
-        puts "#{dx}: #{dy}"
-      end
-      checked = piece.moves.include?(king_position)
-      if checked == true
-        return true
-      end
+      piece.moves.each { |move| @cached_moves.add(move) } # Cache each move of the opponent
+      return true if piece.moves.include?(king_position)
     end
-    return false
+    false
   end
+
+  def handle_check
+    @game.pieces.each do |piece|
+      next if piece.color == "Black" # Only consider white pieces for blocking the check
+  
+      original_position = piece.position # Save the piece's original position
+  
+      piece.generate_moves # Generate all potential moves for the piece
+      piece.moves.each do |move|
+        # Temporarily move the piece to the potential move position
+        piece.position = move
+        
+        # Recheck if the king is still in check after this move
+        if !is_checked?(color="Black")
+          add_move_if_legal(original_position[0], original_position[1]) # Return this move as it stops the check
+          #con la sun ne ba oiii, sun u nuuu If king is not in check, this move can block the check
+          piece.position = original_position # Restore the piece's original position
+          
+        end
+      end
+  
+      piece.position = original_position # Restore the original position if no valid move found
+    end
+  
+    nil # Return nil if no move can stop the check
+  end
+
 
   def generate_bot_moves(piece)
     piece.bot = true
@@ -134,11 +156,11 @@ class Piece
     rank, file = @x / 80, @y / 80
 
     # Single step
-    add_move_if_legal(rank, file + direction) if empty_square?(rank, file + direction)
+    add_move_if_legal(rank, file + direction) if empty_square?(rank, file + direction) && !@bot
 
     # Double step from starting rank
     if (color == "White" && file == 6) || (color == "Black" && file == 1)
-      add_move_if_legal(rank, file + 2 * direction) if empty_square?(rank, file + direction) && empty_square?(rank, file + 2 * direction)
+      add_move_if_legal(rank, file + 2 * direction) if empty_square?(rank, file + direction) && empty_square?(rank, file + 2 * direction) && !@bot
     end
 
     # Capture moves

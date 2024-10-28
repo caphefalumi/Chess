@@ -131,12 +131,16 @@ class Game
   
   def turn
     @last_move = @clicked_piece
+
+    #Black turn
     if @current_turn == :white
       @current_turn = :black
       @engine.random
     else
+      #White turn
       @current_turn = :white
     end
+    in_checked?(@current_turn.to_s.capitalize)
 
   end
 
@@ -207,7 +211,9 @@ class Game
     en_passant_flag = false
     start_x = @clicked_piece.x
     start_y = @clicked_piece.y
+
     render_at_new_pos(rank, file)
+
     if @clicked_piece.type == "Pawn" && ((start_y + 160 == @clicked_piece.y && @clicked_piece.color == "Black") || (start_y - 160 == @clicked_piece.y && @clicked_piece.color == "White"))
       @clicked_piece.can_en_passant = true
     elsif @clicked_piece.type == "King" && start_x == 4 * 80 && (rank == 6 || rank == 2)
@@ -287,10 +293,13 @@ class Game
   end
 
   def in_checked?(color)
-    king = @pieces.find{ |p| p.type == "King" && p.color == color }
-    if king.is_checked?(king, king.x, king.y)
+    king = @pieces.find { |p| p.type == "King" && p.color == color }
+    if king.is_checked?(king.x / 80, king.y / 80)
+      @sounds.move_check.play
+      king.handle_check
     end
   end
+
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
     @clicked_piece.is_moved = true

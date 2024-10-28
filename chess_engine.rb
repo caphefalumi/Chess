@@ -22,7 +22,6 @@ class Engine
   end
   # Generates a random legal move for black
   def random
-    puts @current_turn.to_s.capitalize
     black_pieces = game.pieces.select { |p| p.color == @game.current_turn.to_s.capitalize }
     return if black_pieces.empty?
 
