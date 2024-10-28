@@ -62,6 +62,7 @@ class Game
     @moves = []
     @clicked_piece = nil
     @last_move = nil
+    @checked = false
     @promotion = false
     @is_piece_clicked = false
     @current_turn =:white
@@ -132,15 +133,16 @@ class Game
   def turn
     @last_move = @clicked_piece
 
-    #Black turn
-    if @current_turn == :white
-      @current_turn = :black
-      @engine.random
-    else
-      #White turn
-      @current_turn = :white
-    end
+    # #Black turn
+    # if @current_turn == :white
+    #   @current_turn = :black
+    #   # @engine.random
+    # else
+    #   #White turn
+    #   @current_turn = :white
+    # end
     in_checked?(@current_turn.to_s.capitalize)
+
 
   end
 
@@ -149,7 +151,6 @@ class Game
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     if @clicked_piece
       @clicked_piece.generate_moves
-      draw_possible_moves(@clicked_piece)
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
       @is_piece_clicked = true
     end
@@ -228,7 +229,7 @@ class Game
       promotion_menu
       promotion_flag = true
     # En passant
-    elsif @last_move && @clicked_piece.type == "Pawn" && @last_move.type == "Pawn" && @last_move.can_en_passant
+    elsif @last_move && @last_move.color != @clicked_piece.color && @clicked_piece.type == "Pawn" && @last_move.type == "Pawn" && @last_move.can_en_passant 
       if (start_x + 80 == @clicked_piece.x || start_x - 80 == @clicked_piece.x) && ((start_y + 80 == @clicked_piece.y && @clicked_piece.color == "Black") || (start_y - 80 == @clicked_piece.y && @clicked_piece.color == "White"))
         
         capture_piece(@last_move)
@@ -296,10 +297,26 @@ class Game
     king = @pieces.find { |p| p.type == "King" && p.color == color }
     if king.is_checked?(king.x / 80, king.y / 80)
       @sounds.move_check.play
-      king.handle_check
+      moves_to_solve_check = king.handle_check()
+      puts moves_to_solve_check.inspect
+      delete_illegal_moves(moves_to_solve_check)
+
+      @checked = true
+    else
+      moves_to_solve_check = nil
+      @checked = false
     end
   end
 
+  def delete_illegal_moves(moves_to_solve_check)
+    temp_arr = @moves.dup
+    temp_arr.each do |move|
+      if !moves_to_solve_check.include?(move)
+        puts move
+        @moves.delete(move)
+      end
+    end
+  end
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
     @clicked_piece.is_moved = true
@@ -330,7 +347,6 @@ class Game
 
     @clicked_square = Square.new(x: x, y: y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
     @clicked_square.color.opacity = 0.8
-    
     draw_possible_moves(@clicked_piece)
   end
   
