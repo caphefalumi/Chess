@@ -80,13 +80,12 @@ class Piece
     end
   end
   def is_checked?(dx = @x / 80, dy = @y / 80, p_color = color)
-    return true if @checked  # Skip check if already marked as checked
   
     king_position = [dx, dy]
     @checked = false  # Reset only if we don’t find any threats
   
     @game.pieces.each do |piece|
-      next if piece.color == p_color || piece.type == "King"  # Only consider opponent pieces
+      next if piece.color == p_color # Only consider opponent pieces
       generate_bot_moves(piece)
       
       if piece.moves.include?(king_position)
@@ -123,25 +122,26 @@ class Piece
   # Function to calculate potential blocking squares between the king and the attacking piece
   def calculate_blocking_squares(attacking_piece)
     blocking_squares = []
-
-    # Calculate the direction of the attack (dx and dy will represent the unit step in each direction)
+  
+    # Calculate the direction of the attack (dx and dy represent the unit step in each direction)
     dx = (attacking_piece.x - @x) / 80
     dy = (attacking_piece.y - @y) / 80
-
+  
     # Ensure dx and dy are either -1, 0, or 1 to capture vertical, horizontal, or diagonal directions
     dx = dx <=> 0
     dy = dy <=> 0
-
-    # Calculate intermediate squares between king and attacking piece, exclusive of their positions
+  
+    # Calculate intermediate squares between king and attacking piece, including the attacking piece's position
     x, y = @x + dx * 80, @y + dy * 80
     if attacking_piece.type != "Knight"
-      while [x, y] != [attacking_piece.x, attacking_piece.y]
+      until [x, y] == [attacking_piece.x + dx * 80, attacking_piece.y + dy * 80]
         blocking_squares << [x / 80, y / 80]
         x += dx * 80
         y += dy * 80
       end
     end
-    return blocking_squares
+    
+    blocking_squares
   end
 
 
