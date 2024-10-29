@@ -147,6 +147,7 @@ class Game
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     if @clicked_piece
       @clicked_piece.generate_moves
+      delete_illegal_moves() if @valid_moves
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
       @is_piece_clicked = true
     end
@@ -193,7 +194,6 @@ class Game
     elsif target_piece
       capture_piece(target_piece)
     end
-    delete_illegal_moves(@valid_moves) if @valid_moves
 
     turn if !@promotion
     reset_state_after_move
@@ -293,8 +293,10 @@ class Game
   def in_checked?(color)
     king = @pieces.find { |p| p.type == "King" && p.color == color }
     if king.is_checked?(king.x / 80, king.y / 80)
+      puts "Ok"
       @sounds.move_check.play
       @valid_moves = king.handle_check()
+      king.generate_moves
       @checked = true
     else
       @valid_moves = nil
@@ -302,14 +304,15 @@ class Game
     end
   end
 
-  def delete_illegal_moves(valid_moves)
-    illegal_moves = @clicked_piece.moves - valid_moves
+  def delete_illegal_moves()
+    illegal_moves = @clicked_piece.moves - @valid_moves
     illegal_moves.each do |illegal_move|
       puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
     end
-    @clicked_piece.moves -= illegal_moves
+    @clicked_piece.moves = @valid_moves if @checked && @clicked_piece.type != "King"
+    @valid_moves = nil unless @checked
   end
-  
+
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
     @clicked_piece.is_moved = true

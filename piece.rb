@@ -86,7 +86,7 @@ class Piece
     @checked = false  # Reset only if we don’t find any threats
   
     @game.pieces.each do |piece|
-      next if piece.color == p_color  # Only consider opponent pieces
+      next if piece.color == p_color || piece.type == "King"  # Only consider opponent pieces
       generate_bot_moves(piece)
       
       if piece.moves.include?(king_position)
