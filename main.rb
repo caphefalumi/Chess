@@ -137,7 +137,6 @@ class Game
     if @current_turn == :black
       @engine.random
     end
-    in_checked?(@current_turn.to_s.capitalize)
 
 
   end
@@ -194,6 +193,7 @@ class Game
     elsif target_piece
       capture_piece(target_piece)
     end
+    in_checked?(@current_turn.to_s.capitalize)
 
     turn if !@promotion
     reset_state_after_move
@@ -292,11 +292,11 @@ class Game
 
   def in_checked?(color)
     king = @pieces.find { |p| p.type == "King" && p.color == color }
-    if king.is_checked?(king.x / 80, king.y / 80)
+    puts "#{king.rank} #{king.file}"
+    if king.is_checked?()
       puts "Ok"
       @sounds.move_check.play
       @valid_moves = king.handle_check()
-      king.generate_moves
       @checked = true
     else
       @valid_moves = nil
@@ -305,12 +305,14 @@ class Game
   end
 
   def delete_illegal_moves()
-    illegal_moves = @clicked_piece.moves - @valid_moves
-    illegal_moves.each do |illegal_move|
-      puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
+    if @clicked_piece.type != "King"
+      illegal_moves = @clicked_piece.moves - @valid_moves
+      illegal_moves.each do |illegal_move|
+        puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
+      end
+      @clicked_piece.moves -= illegal_moves  if @checked
+      @valid_moves = nil unless @checked
     end
-    @clicked_piece.moves = @valid_moves if @checked && @clicked_piece.type != "King"
-    @valid_moves = nil unless @checked
   end
 
   # Move the clicked piece to the new coordinates
@@ -321,8 +323,6 @@ class Game
     @clicked_piece.y = file * 80
     @clicked_piece.render_piece
   end
-
-
 
   # Highlight the illegal move visually
   def highlight_illegal_move(piece)
@@ -379,9 +379,9 @@ class Game
   @target_square.remove
   @moves.clear
   @last_move = nil
-  @is_piece_clicked = false
   @pieces.clear
   @current_turn = :white
+  reset_state_after_move
   draw_board
   end
 
