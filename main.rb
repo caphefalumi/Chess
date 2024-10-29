@@ -101,6 +101,7 @@ class Game
         if image_file
           piece = Piece.new(rank * 80, file * 80, piece_pos, image_file, self)
           piece.render_piece
+          puts piece.render
           @pieces << piece
         end
         @sounds.game_start.play
@@ -132,15 +133,10 @@ class Game
   
   def turn
     @last_move = @clicked_piece
-
-    # #Black turn
-    # if @current_turn == :white
-    #   @current_turn = :black
-    #   # @engine.random
-    # else
-    #   #White turn
-    #   @current_turn = :white
-    # end
+    # @current_turn = @current_turn == :white ? :black : :white
+    if @current_turn == :black
+      @engine.random
+    end
     in_checked?(@current_turn.to_s.capitalize)
 
 
@@ -197,6 +193,7 @@ class Game
     elsif target_piece
       capture_piece(target_piece)
     end
+    delete_illegal_moves(@valid_moves) if @valid_moves
 
     turn if !@promotion
     reset_state_after_move
@@ -297,26 +294,22 @@ class Game
     king = @pieces.find { |p| p.type == "King" && p.color == color }
     if king.is_checked?(king.x / 80, king.y / 80)
       @sounds.move_check.play
-      moves_to_solve_check = king.handle_check()
-      puts moves_to_solve_check.inspect
-      delete_illegal_moves(moves_to_solve_check)
-
+      @valid_moves = king.handle_check()
       @checked = true
     else
-      moves_to_solve_check = nil
+      @valid_moves = nil
       @checked = false
     end
   end
 
-  def delete_illegal_moves(moves_to_solve_check)
-    temp_arr = @moves.dup
-    temp_arr.each do |move|
-      if !moves_to_solve_check.include?(move)
-        puts move
-        @moves.delete(move)
-      end
+  def delete_illegal_moves(valid_moves)
+    illegal_moves = @clicked_piece.moves - valid_moves
+    illegal_moves.each do |illegal_move|
+      puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
     end
+    @clicked_piece.moves -= illegal_moves
   end
+  
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
     @clicked_piece.is_moved = true

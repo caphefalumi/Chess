@@ -20,6 +20,12 @@ class Piece
     @render = Image.new(@piece_image, x: @x, y: @y, z: ZOrder::PIECE, width: 80, height: 80)
   end
 
+  def rank
+    @x / 80
+  end
+  def file
+    @y / 80
+  end
   def position
     [@x, @y]
   end
@@ -92,7 +98,7 @@ class Piece
     end
     return @checked  # Return the current status of @checked
   end
-  
+
   def handle_check()
     moves_to_block = []
     blocking_squares = calculate_blocking_squares(@attacking_pieces.first) 
@@ -105,8 +111,8 @@ class Piece
         piece.generate_moves()
         piece.moves.each do |move|
           if blocking_squares.include?(move)
-            moves_to_block << [piece.position, move]
-            puts "#{piece.name} from #{piece.position} to #{move}" 
+            moves_to_block << move
+            puts "#{piece.name} from #{[piece.rank, piece.file ]} to #{move}" 
           end
         end
       end
@@ -130,7 +136,7 @@ class Piece
     x, y = @x + dx * 80, @y + dy * 80
     if attacking_piece.type != "Knight"
       while [x, y] != [attacking_piece.x, attacking_piece.y]
-        blocking_squares << [x, y]
+        blocking_squares << [x / 80, y / 80]
         x += dx * 80
         y += dy * 80
       end
