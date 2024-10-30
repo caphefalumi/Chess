@@ -1,5 +1,6 @@
 require 'rubygems'
 require 'ruby2d'
+require 'set'
 require_relative 'piece'
 require_relative 'chess_engine'
 module ZOrder
@@ -57,7 +58,7 @@ class Game
   attr_accessor :clicked_piece, :current_turn
   def initialize
     @sounds = Sounds.new
-    @pieces = []
+    @pieces = Set.new()
     @squares = []
     @moves = []
     @clicked_piece = nil
@@ -101,13 +102,11 @@ class Game
         if image_file
           piece = Piece.new(rank * 80, file * 80, piece_pos, image_file, self)
           piece.render_piece
-          puts piece.render
-          @pieces << piece
+          @pieces.add(piece)
         end
+        @sounds.game_start.play
       end
     end
-    @sounds.game_start.play
-
   end
 
   def handle_mouse_click(mouse)
@@ -195,7 +194,7 @@ class Game
       capture_piece(target_piece)
     end
     in_checked?(@current_turn.to_s.capitalize)
-    checkmate?(@current_turn.to_s.capitalize)
+
     turn if !@promotion
     reset_state_after_move
   end
@@ -245,6 +244,7 @@ class Game
     target_piece.render.remove
     @pieces.delete(target_piece)
     @sounds.capture.play
+    puts @pieces.size.to_i
   end
 
   def promotion_menu()
@@ -293,10 +293,9 @@ class Game
   def in_checked?(color)
     king = @pieces.find { |p| p.type == "King" && p.color == color }
     if king.is_checked?()
-      puts "Ok"
       @sounds.move_check.play
       @valid_moves = king.handle_check()
-      puts @valid_moves
+      puts @valid_moves.inspect
       @checked = true
     else
       @valid_moves = nil
@@ -304,30 +303,15 @@ class Game
     end
   end
 
-  def checkmate?(color)
-    # return false if !@checked
-    # # Find the king for the specified color
-    # friendly_piece = @pieces.select { |p| p.color == color }
-    # friendly_piece.each do |piece|
-    #   piece.generate_moves
-    #   if @valid_moves.include?(piece.moves)
-    #     return false
-    #   end
-    # end
-    #  # If we've tried all pieces and all moves and none help, it's checkmate
-    # @sounds.game_end.play
-    # puts "Checkmate! #{color} loses!"
-    # reset_board
-    # return true
-  end
   def delete_illegal_moves()
-    illegal_moves = @clicked_piece.moves - @valid_moves
-    illegal_moves.each do |illegal_move|
-      puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
+    if @clicked_piece.type != "King"
+      illegal_moves = @clicked_piece.moves - @valid_moves
+      illegal_moves.each do |illegal_move|
+        puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
+      end
+      @clicked_piece.moves -= illegal_moves  if @checked
+      @valid_moves = nil unless @checked
     end
-    puts @valid_moves.inspect
-    @clicked_piece.moves -= illegal_moves  if @checked
-    @valid_moves = nil unless @checked
   end
 
   # Move the clicked piece to the new coordinates
