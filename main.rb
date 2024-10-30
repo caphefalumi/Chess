@@ -59,7 +59,6 @@ class Game
   def initialize
     @sounds = Sounds.new
     @pieces = Set.new()
-    @squares = []
     @moves = []
     @clicked_piece = nil
     @last_move = nil
@@ -92,8 +91,7 @@ class Game
         square_color = is_light_square ? "#6e4e36" : "#b99b75"
 
         # Draw square
-        square = Square.new(x: rank * 80, y: file * 80, size: 80, z: ZOrder::BOARD, color: square_color)
-        @squares << square
+        Square.new(x: rank * 80, y: file * 80, size: 80, z: ZOrder::BOARD, color: square_color)
 
         # Get the piece at the current position
         piece_pos = @board[file][rank]

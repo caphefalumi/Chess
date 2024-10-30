@@ -6,10 +6,10 @@ class Piece
 
   def initialize(x, y, piece, piece_image, game)
     @x, @y, @piece, @piece_image, @game = x, y, piece, piece_image, game
-    @moves = []
+    @moves = Set.new()
     @cached_moves = Set.new()
     @bot = false
-    @attacking_pieces = Array.new()
+    @attacking_pieces = Set.new()
     @king_color = "White"
     @is_moved = false
     @checked = false
@@ -99,7 +99,7 @@ class Piece
       generate_bot_moves(piece)
       
       if piece.moves.include?(king_position)
-        @attacking_pieces << piece
+        @attacking_pieces.add(piece)
         @checked = true
         break  # Exit early since we found a check
       end
@@ -154,43 +154,11 @@ class Piece
   def is_pinned?
     king = @game.pieces.find { |p| p.type == "King" && p.color == color }
     return false if type == "King" || king.color != color || king.is_checked  # Kings cannot be pinned    
-    
-    # Temporarily remove this piece from the board
-    @game.pieces.delete(self)
-
-    # Check if removing this piece puts the king in check
-    is_pinned = king.is_checked?
-
-    # Restore the piece
-    @game.pieces << self
 
     return is_pinned
   end
 
-  def legal_pinned_moves
-    return @moves if type == "King"  # Kings cannot be pinned
-    king = @game.pieces.find { |p| p.type == "King" && p.color == color }
-    
-    pin_line = []
-    original_x, original_y = @x, @y
 
-    
-    # Try each possible move
-    @moves.each do |move|
-      # Temporarily move the piece
-      @x, @y = move[0] * 80, move[1] * 80
-
-      # Check if this move keeps the king safe
-      if !king.is_checked?
-        pin_line << [move[0], move[1]]
-      end
-      
-      # Restore original position
-      @x, @y = original_x, original_y
-    end
-    # Return only the moves that keep the king safe
-    pin_line
-  end
   
   def generate_bot_moves(piece)
     piece.bot = true
@@ -282,15 +250,15 @@ class Piece
     target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80 && p.color }
     # Empty square or perform a xray attack  
     if target_piece.nil? || (target_piece.type == "King" && target_piece.color != color)
-      @moves << [new_x, new_y]
+      @moves.add([new_x, new_y])
       true
     # Capture a piece
     elsif target_piece.color != color
-      @moves << [new_x, new_y]
+      @moves.add([new_x, new_y])
       false
     # Protect a friendly piece
     elsif target_piece.color == color && color == "Black" && @bot
-      @moves << [new_x, new_y]
+      @moves.add([new_x, new_y])
       false
     end
     
