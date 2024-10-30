@@ -7,11 +7,13 @@ class Piece
   def initialize(x, y, piece, piece_image, game)
     @x, @y, @piece, @piece_image, @game = x, y, piece, piece_image, game
     @moves = []
+    @blocking_squares = Set.new()
     @cached_moves = Set.new()
     @bot = false
-    @attacking_pieces = Array.new()
+    @attacking_pieces = Set.new()
     @king_color = "White"
     @is_moved = false
+    @pinned_piece = nil
     @checked = false
     @can_en_passant = false
   end
@@ -73,6 +75,7 @@ class Piece
       add_move_if_legal(@x / 80 + dx, @y / 80 + dy) if !is_checked?(@x / 80 + dx, @y / 80 + dy)
     end
 
+    #Castle
     if !is_moved
       king_side_rook = find_castling_rook(7 * 80)
       queen_side_rook = find_castling_rook(0)
@@ -90,45 +93,50 @@ class Piece
       generate_bot_moves(piece)
       
       if piece.moves.include?(king_position)
-        puts piece.name
-        @attacking_pieces << piece
+        @attacking_pieces.add(piece)
         @checked = true
-        break  # Exit early since we found a check
       end
+    end
+    if @checked == false && @blocking_squares
+      @blocking_squares.clear
     end
     return @checked  # Return the current status of @checked
   end
 
   def handle_check()
     moves_to_block = []
-    blocking_squares = squares_from_attack_to_king(@attacking_pieces.first) 
-    puts blocking_squares.inspect
-    if attacking_pieces.size >= 2 # Double check or more
-      king_moves  # Force the king to move
-    else  # Single check
+    squares_from_attack_to_king(@attacking_pieces.first) 
+    blocking_squares = @blocking_squares.to_a
+    if @attacking_pieces.size == 1 # Double check
+    # Single check
       @game.pieces.each do |piece|
         next if piece.color != color
+        puts piece.name
         piece.generate_moves()
         piece.moves.each do |move|
           if blocking_squares.include?(move)
             moves_to_block << move
             puts "#{piece.name} from #{[piece.rank, piece.file ]} to #{move}" 
+          else 
+            # puts "#{blocking_squares.inspect} #{piece.name}: #{move}"
           end
         end
       end
+    elsif @attacking_pieces.size == 2 || moves_to_block.size == 0
+      king_moves
     end
+    puts moves_to_block.inspect
     return moves_to_block
   end
 
 
   # Function to calculate potential blocking squares between the king and the attacking piece
   def squares_from_attack_to_king(attacking_piece)
-    blocking_squares = []
     
     # Special handling for knights - only the knight's position can be blocked
     if attacking_piece.type == "Knight" || attacking_piece.type == "Pawn"
-      blocking_squares << [attacking_piece.x / 80, attacking_piece.y / 80]
-      return blocking_squares
+      @blocking_squares.add([attacking_piece.x / 80, attacking_piece.y / 80])
+      return
     end
     
     
@@ -138,7 +146,7 @@ class Piece
     
     # Get the number of steps to normalize direction
     steps = [dx.abs, dy.abs].max
-    return blocking_squares if steps == 0
+    return @blocking_squares if steps == 0
     
     # Normalize to get unit vector
     dx = (dx.to_f / steps).round
@@ -150,12 +158,11 @@ class Piece
     
     # Add all squares from king to attacking piece (inclusive)
     while current_x * 80 != attacking_piece.x + dx * 80 || current_y * 80 != attacking_piece.y + dy * 80
-      blocking_squares << [current_x, current_y]
+      @blocking_squares.add([current_x, current_y])
       current_x += dx
       current_y += dy
     end
     
-    blocking_squares
   end
 
 
@@ -179,7 +186,6 @@ class Piece
     return false if type == "King"  # Kings cannot be pinned
     
     king = @game.pieces.find { |p| p.type == "King" && p.color == color }
-    return false unless king  # Safety check
     
     # Store original position
     original_x, original_y = @x, @y
@@ -189,61 +195,45 @@ class Piece
     
     # Check if removing this piece puts the king in check
     is_pinned = king.is_checked?
-    
+    if is_pinned
+      @pinned_piece = self
+    end
     # Restore the piece
     @game.pieces << self
     @x, @y = original_x, original_y
     
     return is_pinned
   end
-  def get_valid_moves
-    return @moves unless is_pinned?
-    
+
+  def get_valid_moves    
     king = @game.pieces.find { |p| p.type == "King" && p.color == color }
-    pinner = find_pinner(king)
-    return [] unless pinner # Safety check
+    return @moves unless is_pinned?  # Return all moves if not pinned
     
-    # Calculate the line between the king and the pinner
-    pin_line = squares_between(king, pinner)
+    pin_line = []
+    original_x, original_y = @x, @y
+    original_moves = @moves.dup
     
-    # Only allow moves that stay on the pin line
-    @moves.select { |move| pin_line.include?([move[0], move[1]]) }
-  end
-  # Helper method to find the piece causing the pin
-  def find_pinner(king)
-    @game.pieces.find do |piece|
-      next if piece.color == color || piece.type == "King" || piece.type == "Knight"
+    # Try each possible move
+    original_moves.each do |move|
+      # Temporarily move the piece
+      @x, @y = move[0] * 80, move[1] * 80
       
-      # Check if piece is attacking through this piece to the king
-      dx = piece.x - king.x
-      dy = piece.y - king.y
+
+      # Check if this move keeps the king safe
+      if !king.is_checked?
+        pin_line << [move[0], move[1]]
+      end
       
-      next unless dx.abs == dy.abs || dx.zero? || dy.zero? # Must be on same rank, file, or diagonal
+      # Restore captured piece if any
       
-      squares = squares_between(king, piece)
-      pieces_between = @game.pieces.count { |p| squares.include?([p.x / 80, p.y / 80]) }
-      pieces_between == 1 # Only the pinned piece should be between
+      # Restore original position
+      @x, @y = original_x, original_y
     end
+    # Return only the moves that keep the king safe
+    pin_line
   end
 
-  # Helper method to get squares between two pieces
-  def squares_between(piece1, piece2)
-    squares = []
-    x1, y1 = piece1.x / 80, piece1.y / 80
-    x2, y2 = piece2.x / 80, piece2.y / 80
-    
-    dx = (x2 - x1).zero? ? 0 : (x2 - x1) / (x2 - x1).abs
-    dy = (y2 - y1).zero? ? 0 : (y2 - y1) / (y2 - y1).abs
-    
-    current_x, current_y = x1, y1
-    while [current_x, current_y] != [x2, y2]
-      squares << [current_x, current_y]
-      current_x += dx
-      current_y += dy
-    end
-    squares << [x2, y2]
-    squares
-  end
+
   def sliding_moves(type)
     directions = {
       "Rook"   => [[1, 0], [-1, 0], [0, 1], [0, -1]],

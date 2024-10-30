@@ -293,9 +293,10 @@ class Game
   def in_checked?(color)
     king = @pieces.find { |p| p.type == "King" && p.color == color }
     if king.is_checked?()
+      puts "Ok"
       @sounds.move_check.play
       @valid_moves = king.handle_check()
-      puts @valid_moves.inspect
+      puts @valid_moves
       @checked = true
     else
       @valid_moves = nil
@@ -304,26 +305,27 @@ class Game
   end
 
   def checkmate?(color)
-    return false if !@checked
-    # Find the king for the specified color
-    friendly_piece = @pieces.select { |p| p.color == color }
-    friendly_piece.each do |piece|
-      piece.generate_moves
-      if @valid_moves.include?(piece.moves)
-        return false
-      end
-    end
-     # If we've tried all pieces and all moves and none help, it's checkmate
-    @sounds.game_end.play
-    puts "Checkmate! #{color} loses!"
-    reset_board
-    return true
+    # return false if !@checked
+    # # Find the king for the specified color
+    # friendly_piece = @pieces.select { |p| p.color == color }
+    # friendly_piece.each do |piece|
+    #   piece.generate_moves
+    #   if @valid_moves.include?(piece.moves)
+    #     return false
+    #   end
+    # end
+    #  # If we've tried all pieces and all moves and none help, it's checkmate
+    # @sounds.game_end.play
+    # puts "Checkmate! #{color} loses!"
+    # reset_board
+    # return true
   end
   def delete_illegal_moves()
     illegal_moves = @clicked_piece.moves - @valid_moves
     illegal_moves.each do |illegal_move|
       puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
     end
+    puts @valid_moves.inspect
     @clicked_piece.moves -= illegal_moves  if @checked
     @valid_moves = nil unless @checked
   end
