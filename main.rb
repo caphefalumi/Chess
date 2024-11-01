@@ -7,7 +7,7 @@ module ZOrder
 end
 
 class Sounds
-  attr_accessor :capture, :castle, :illegal, :move_check, :move_self, :move_opponent, :promote, :game_start, :game_end
+  attr_reader :capture, :castle, :illegal, :move_check, :move_self, :move_opponent, :promote, :game_start, :game_end
 
   def initialize
     @capture = Music.new("sounds/capture.mp3")
@@ -53,7 +53,7 @@ end
 
 
 class Game
-  attr_reader :pieces, :last_move, :checked
+  attr_reader :pieces, :last_move, :checked, :game_over
   attr_accessor :clicked_piece, :current_turn, :valid_moves
   def initialize
     @sounds = Sounds.new
@@ -90,7 +90,13 @@ class Game
         square_color = is_light_square ? "#6e4e36" : "#b99b75"
 
         # Draw square
-        Square.new(x: rank * 80, y: file * 80, size: 80, z: ZOrder::BOARD, color: square_color)
+        Square.new(
+          x: rank * 80,
+          y: file * 80,
+          size: 80,
+          z: ZOrder::BOARD,
+          color: square_color
+          )
 
         # Get the piece at the current position
         piece_pos = @board[file][rank]
@@ -108,7 +114,7 @@ class Game
 
   def handle_mouse_click(mouse)
     rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
-    
+    @mouse_x, @mouse_y = mouse.x, mouse.y
     case mouse.button
     when :left
       clear_previous_selection if @clicked_square && (@target_square || @illegal_state)
@@ -116,8 +122,10 @@ class Game
       # Reset the illegal state if a piece is clicked, and allow new selection
       @illegal_state = false if @clicked_piece && @illegal_state
   
-      if @promotion
-        select_promotion_menu(mouse.x, mouse.y)
+      if @game_over
+        checkmate_ui()
+      elsif @promotion
+        promotion_ui()
       elsif @current_turn == :white
         if !@is_piece_clicked
           select_piece(rank, file)
@@ -134,8 +142,10 @@ class Game
     if @current_turn == :black
       @engine.random
     end
+  end
 
-
+  def area_clicked(leftX, topY, rightX, bottomY)
+		return @mouse_x >= leftX && @mouse_x <= rightX && @mouse_y >= topY && @mouse_y <= bottomY
   end
 
   # Selects a piece if one is found at the clicked square
@@ -153,7 +163,13 @@ class Game
   # Highlights all possible moves for the selected piece
   def draw_possible_moves(piece)
     piece.moves.each do |move|
-      move_circle = Circle.new(x: move[0] * 80 + 40, y: move[1] * 80 + 40, radius: 10, color: 'black', z: ZOrder::OVERLAP)
+      move_circle = Circle.new(
+        x: move[0] * 80 + 40,
+        y: move[1] * 80 + 40,
+        z: ZOrder::OVERLAP,
+        radius: 10,
+        color: 'black'
+        )
       target_piece_square = @pieces.find { |p| p.x == move[0] * 80 && p.y == move[1] * 80 }
   
       if target_piece_square
@@ -200,7 +216,13 @@ class Game
   def move_piece(rank, file)
     @clicked_piece.pre_x = @clicked_piece.x
     @clicked_piece.pre_y = @clicked_piece.y
-    @target_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+    @target_square = Square.new(
+      x: rank * 80,
+      y: file * 80,
+      z: ZOrder::OVERLAP,
+      size: 80,
+      color: "#B58B37"
+    )
     @target_square.color.opacity = 0.8
     castle_flag = false
     capture_flag = false
@@ -281,7 +303,14 @@ class Game
 
   def promotion_menu()
     @promotion_options = Array.new()
-    @promotion_menu_rect = Rectangle.new(x: @clicked_piece.x, y: @clicked_piece.y, z: ZOrder::PROMOTION, width: 80, height: 320, color: 'gray')
+    @promotion_menu_rect = Rectangle.new(
+      x: @clicked_piece.x,
+      y: @clicked_piece.y,
+      z: ZOrder::PROMOTION,
+      width: 80,
+      height: 320,
+      color: 'gray'
+      )
     %w[Queen Rook Bishop Night].each_with_index do |piece_type, i|
       piece_image = Image.new("pieces/#{@current_turn[0]}#{piece_type[0]}.png", x: @clicked_piece.x, y: @clicked_piece.y + i * 80, width: 80, height: 80, z: 5)
       @promotion_options << [piece_image, piece_type]
@@ -289,11 +318,10 @@ class Game
     @promotion = true
   end
 
-  def select_promotion_menu(mouse_x, mouse_y)
+  def promotion_ui()
     for i in 0..3
       image = @promotion_options[i][0]
-      if (mouse_x >= image.x && mouse_x <= image.x + image.width) &&
-        (mouse_y >= image.y && mouse_y <= image.y + image.height)
+      if area_clicked(image.x, image.y, image.x + image.with, image.y + image.height)
         selected_type = @promotion_options[i][1]
         @clicked_piece.render.remove
         @clicked_piece.promotion(selected_type)
@@ -326,8 +354,11 @@ class Game
     king = @pieces.find { |p| p.type == "King" && p.color == @current_turn.to_s.capitalize }
     if king.is_checked?()
       @sounds.move_check.play
+
       @valid_moves = king.handle_check()
-      puts @valid_moves.inspect
+      if @valid_moves.size == 0
+        checkmate
+      end
       @checked = true
     else
       @valid_moves = nil
@@ -335,7 +366,70 @@ class Game
     end
   end
 
+  def checkmate
+    @game_over = true
+    @sounds.game_end.play
+    # Semi-transparent overlay
+    @overlay = Rectangle.new(
+      x: 0,
+      y: 0,
+      width: 640,
+      height: 640,
+      color: 'black',
+      z: ZOrder::PROMOTION
+    )
+    @overlay.color.opacity = 0.7
 
+    # Main dialog box
+    @dialog = Rectangle.new(
+      x: 120,
+      y: 180,
+      width: 400,
+      height: 280,
+      color: 'white',
+      z: ZOrder::PROMOTION + 1
+    )
+
+    # Winner text
+    @winner_text = Text.new(
+      "#{@current_turn == :white ? 'Black' : 'White'} wins by checkmate!",
+      x: 180,
+      y: 240,
+      size: 24,
+      color: 'black',
+      z: ZOrder::PROMOTION + 1
+    )
+
+    # Play Again button
+    @play_again_button = Rectangle.new(
+      x: 220,
+      y: 340,
+      width: 200,
+      height: 50,
+      color: '#2F70FF',
+      z: ZOrder::PROMOTION + 1
+    )
+
+    @play_again_text = Text.new(
+      'Play Again',
+      x: 270,
+      y: 355,
+      size: 20,
+      color: 'white',
+      z: ZOrder::PROMOTION + 1
+    )
+  end
+
+  def checkmate_ui()
+    if area_clicked(@play_again_button.x, @play_again_button.y, @play_again_button.x + @play_again_button.width, @play_again_button.y + @play_again_button.height)
+      reset_board
+      @overlay.remove
+      @dialog.remove
+      @winner_text.remove
+      @play_again_text.remove
+      @play_again_button.remove
+    end
+  end
   def delete_illegal_moves()
     if @clicked_piece.type != "King"
       illegal_moves = @clicked_piece.moves - @valid_moves
@@ -403,18 +497,23 @@ class Game
   end 
 
   def reset_board
-  @pieces.each do |piece,index|
-    piece.render.remove
-    @pieces.delete_at(index)
-  end
-  @clicked_square.remove
-  @target_square.remove
-  @moves.clear
-  @last_move = nil
-  @pieces.clear
-  @current_turn = :white
-  reset_state_after_move
-  draw_board
+    @pieces.each do |piece|
+      piece.render.remove
+    end
+    @pieces.clear
+    @clicked_square&.remove
+    @target_square&.remove
+    @moves.each(&:remove)
+    @moves.clear
+    @last_move = nil
+    @current_turn = :white
+    @checked = false
+    @valid_moves = nil
+    @clicked_piece = nil
+    @is_piece_clicked = false
+    @promotion = false
+    @board = initialize_board
+    draw_board
   end
 end
 

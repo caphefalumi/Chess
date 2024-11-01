@@ -113,7 +113,7 @@ class Piece
     blocking_squares = calculate_blocking_squares(@attacking_pieces.first) 
     if @attacking_pieces.size >= 2 # Double check or more
       king_moves  # Force the king to move
-    else  # Single check
+    elsif blocking_squares.any?  # Single check
       @game.pieces.each do |piece|
         next if piece.color != color
         piece.generate_moves()
@@ -146,7 +146,7 @@ class Piece
   end
   # Function to calculate potential blocking squares between the king and the attacking piece
   def calculate_blocking_squares(attacking_piece)
-    blocking_squares = Set.new()
+    blocking_squares = Set.new
   
     # Calculate the direction of the attack (dx and dy represent the unit step in each direction)
     dx = (attacking_piece.x - @x) / 80
@@ -156,23 +156,19 @@ class Piece
     dx = dx <=> 0
     dy = dy <=> 0
   
-    # Calculate intermediate squares between king and attacking piece, including the attacking piece's position
+    # Calculate intermediate squares between king and attacking piece, including up to the attacking piece's position
     x, y = @x + dx * 80, @y + dy * 80
     if attacking_piece.type != "Knight"
-      until [x, y] == [attacking_piece.x + dx * 80, attacking_piece.y + dy * 80]
+      until [x, y] == [attacking_piece.x, attacking_piece.y]
         blocking_squares.add([x / 80, y / 80])
         x += dx * 80
         y += dy * 80
       end
     end
-    
+  
     blocking_squares.to_a
   end
-
-  # Write a function that will detect if a piece is pinned, and if its is pinned, it will delete moves that will make the king in check
   
-
-
   def generate_bot_moves(piece)
     piece.bot = true
     piece.generate_attack_moves
