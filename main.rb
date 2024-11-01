@@ -1,4 +1,3 @@
-require 'rubygems'
 require 'ruby2d'
 require 'set'
 require_relative 'piece'
@@ -54,8 +53,8 @@ end
 
 
 class Game
-  attr_reader :pieces, :last_move
-  attr_accessor :clicked_piece, :current_turn
+  attr_reader :pieces, :last_move, :checked
+  attr_accessor :clicked_piece, :current_turn, :valid_moves
   def initialize
     @sounds = Sounds.new
     @pieces = Set.new()
@@ -144,6 +143,7 @@ class Game
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     if @clicked_piece
       @clicked_piece.generate_moves
+      @clicked_piece.is_pinned?
       delete_illegal_moves() if @valid_moves
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
       @is_piece_clicked = true
@@ -191,14 +191,15 @@ class Game
     elsif target_piece
       capture_piece(target_piece)
     end
-    in_checked?(@current_turn.to_s.capitalize)
-
+    in_checked
     turn if !@promotion
     reset_state_after_move
   end
   
   
   def move_piece(rank, file)
+    @clicked_piece.pre_x = @clicked_piece.x
+    @clicked_piece.pre_y = @clicked_piece.y
     @target_square = Square.new(x: rank * 80, y: file * 80, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
     @target_square.color.opacity = 0.8
     castle_flag = false
@@ -226,7 +227,6 @@ class Game
     # En passant
     elsif @last_move && @last_move.color != @clicked_piece.color && @clicked_piece.type == "Pawn" && @last_move.type == "Pawn" && @last_move.can_en_passant 
       if (start_x + 80 == @clicked_piece.x || start_x - 80 == @clicked_piece.x) && ((start_y + 80 == @clicked_piece.y && @clicked_piece.color == "Black") || (start_y - 80 == @clicked_piece.y && @clicked_piece.color == "White"))
-        
         capture_piece(@last_move)
         en_passant_flag = true
       end
@@ -235,13 +235,47 @@ class Game
       @sounds.move_self.play 
     end
 
-  end
 
+  end
+  
+  def undo_move
+    return if @pieces.empty? || @last_move.nil?
+    
+    # Store the piece that was last moved
+    piece_to_undo = @last_move
+    
+    # Revert the piece position to its previous position
+    piece_to_undo.render.remove
+    piece_to_undo.x = piece_to_undo.pre_x
+    piece_to_undo.y = piece_to_undo.pre_y
+    piece_to_undo.render_piece
+    
+    # If there was a capture, restore the captured piece
+    if piece_to_undo.capture_piece
+      captured_piece = piece_to_undo.capture_piece
+      captured_piece.render_piece
+      @pieces.add(captured_piece)
+      piece_to_undo.capture_piece = nil
+    end
+    
+    # Reset en passant flag if it was set
+    piece_to_undo.can_en_passant = false if piece_to_undo.type == "Pawn"
+    
+    # Clear any highlighted squares or moves
+    clear_previous_selection(only_moves: false)
+    
+    # Reset all states
+    reset_state_after_move
+    
+    # Reset the last move
+    @last_move = nil
+  end
   # Captures the opponent's piece
   def capture_piece(target_piece)
     target_piece.render.remove
     @pieces.delete(target_piece)
     @sounds.capture.play
+    @clicked_piece.capture_piece = target_piece
     puts @pieces.size.to_i
   end
 
@@ -288,8 +322,8 @@ class Game
     end
   end
 
-  def in_checked?(color)
-    king = @pieces.find { |p| p.type == "King" && p.color == color }
+  def in_checked()
+    king = @pieces.find { |p| p.type == "King" && p.color == @current_turn.to_s.capitalize }
     if king.is_checked?()
       @sounds.move_check.play
       @valid_moves = king.handle_check()
@@ -301,14 +335,15 @@ class Game
     end
   end
 
+
   def delete_illegal_moves()
     if @clicked_piece.type != "King"
       illegal_moves = @clicked_piece.moves - @valid_moves
       illegal_moves.each do |illegal_move|
         puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
       end
-      @clicked_piece.moves -= illegal_moves  if @checked
-      @valid_moves = nil unless @checked
+      @clicked_piece.moves -= illegal_moves  if @checked || @clicked_piece.is_pinned
+      @valid_moves = nil unless @checked || @clicked_piece.is_pinned
     end
   end
 
@@ -381,8 +416,8 @@ class Game
   reset_state_after_move
   draw_board
   end
+end
 
-end 
 
 set width: 640, height: 640
 
@@ -392,5 +427,9 @@ game = Game.new
 on :mouse_down do |mouse|
   game.handle_mouse_click(mouse)
 end
-
+on :key_down do |event|
+  if event.key == 'z'
+    game.undo_move
+  end
+end
 show
