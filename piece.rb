@@ -134,7 +134,6 @@ class Piece
         end
       end
     end
-
     return legal_moves.to_a
   end
 
@@ -154,7 +153,7 @@ class Piece
 
   end
   # Function to calculate potential blocking squares between the king and the attacking piece
-  def calculate_blocking_squares(attacking_piece)
+  private def calculate_blocking_squares(attacking_piece)
     blocking_squares = Set.new
   
     # Calculate the direction of the attack (dx and dy represent the unit step in each direction)
@@ -178,14 +177,14 @@ class Piece
     blocking_squares.to_a
   end
   
-  def generate_bot_moves(piece)
+  private def generate_bot_moves(piece)
     piece.bot = true
     piece.generate_attack_moves
     piece.bot = false
   end
 
 
-  def sliding_moves(type)
+  private def sliding_moves(type)
     directions = {
       "Rook"   => [[1, 0], [-1, 0], [0, 1], [0, -1]],
       "Bishop" => [[1, 1], [-1, -1], [1, -1], [-1, 1]],
@@ -202,14 +201,14 @@ class Piece
     end
   end
 
-  def knight_moves
+  private def knight_moves
     knight_offsets = [[2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]]
     knight_offsets.each do |dx, dy| 
       add_move_if_legal(@x / 80 + dx, @y / 80 + dy)
     end
   end
 
-  def pawn_moves
+  private def pawn_moves
     direction = color == "White" ? -1 : 1
     rank, file = @x / 80, @y / 80
 
@@ -229,18 +228,18 @@ class Piece
     add_en_passant_moves(rank, file, direction)
   end
 
-  def empty_square?(x, y)
+  private def empty_square?(x, y)
     !@game.pieces.find { |p| p.x == x * 80 && p.y == y * 80 }
   end
 
-  def capture_pawn(target_rank, target_file)
+  private def capture_pawn(target_rank, target_file)
     target_piece = @game.pieces.find { |p| p.x == target_rank * 80 && p.y == target_file * 80 }
     if (target_piece && target_piece.color != color) || @bot
       add_move_if_legal(target_rank, target_file) 
     end
   end
 
-  def add_en_passant_moves(rank, file, direction)
+  private def add_en_passant_moves(rank, file, direction)
     if @game.last_move&.type == "Pawn" && @game.last_move.can_en_passant
       en_passant_positions = [[rank - 1, file], [rank + 1, file]]
       en_passant_positions.each do |target_rank, _|
@@ -255,14 +254,14 @@ class Piece
     promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK))
   end
 
-  def promote(new_piece_type)
+  private def promote(new_piece_type)
     @piece = new_piece_type
     @piece_image = piece_image(@piece)
     render_piece
     puts "#{color} pawn promoted to #{type}!"
   end
 
-  def add_move_if_legal(new_x, new_y)
+  private def add_move_if_legal(new_x, new_y)
     return false unless new_x.between?(0, 7) && new_y.between?(0, 7)
     
     target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80}

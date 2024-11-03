@@ -45,10 +45,6 @@ class Engine
       @game.clear_previous_selection(only_moves: false)
       @game.clicked_piece = piece_to_move
       move = piece_to_move.moves.sample
-      # puts "Black piece: #{@game.clicked_piece.name}"
-      # puts "Black piece position: #{@game.clicked_piece.position}"
-      # puts "Target move: (#{move[0]}, #{move[1]})"
-      # Ensure @clicked_piece is still valid before moving
       if @game.clicked_piece
         @game.highlight_selected_piece(@game.clicked_piece.x, @game.clicked_piece.y)
         @game.move_piece_or_capture(move[0], move[1])
