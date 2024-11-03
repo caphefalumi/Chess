@@ -121,6 +121,7 @@ class Piece
     legal_moves = Set.new()
     blocking_squares = calculate_blocking_squares(attacking_piece) 
     legal_moves.add([attacking_piece.rank, attacking_piece.file])
+    puts blocking_squares.inspect
     if @attacking_pieces.size >= 2 # Double check or more
       king_moves  # Force the king to move
     elsif blocking_squares.any?  # Single check
@@ -128,12 +129,16 @@ class Piece
         next if piece.color != color
         piece.generate_moves
         piece.moves.each do |move|
+          if piece.type == "Pawn"
+            puts move.inspect
+          end
           if blocking_squares.include?(move)
             legal_moves.add(move)
           end
         end
       end
     end
+    puts legal_moves.inspect
     return legal_moves.to_a
   end
 
@@ -177,7 +182,7 @@ class Piece
     blocking_squares.to_a
   end
   
-  private def generate_bot_moves(piece)
+  def generate_bot_moves(piece)
     piece.bot = true
     piece.generate_attack_moves
     piece.bot = false

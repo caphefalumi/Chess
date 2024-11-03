@@ -18,7 +18,6 @@ class Sounds
     @game_start = Music.new("sounds/game_start.mp3")
     @game_end = Music.new("sounds/game_end.mp3")
     @promote = Music.new("sounds/promote.mp3")
-
   end
 end
 
@@ -47,7 +46,6 @@ def piece_image(piece)
   when PieceEval::PAWN   then "pieces/#{color}p.png"
   end
 end
-
 
 
 class Game
@@ -166,7 +164,7 @@ class Game
         z: ZOrder::OVERLAP,
         radius: 10,
         color: 'black'
-        )
+      )
       target_piece_square = @pieces.find { |p| p.x == move[0] * 80 && p.y == move[1] * 80 }
   
       if target_piece_square
@@ -304,7 +302,7 @@ class Game
       width: 80,
       height: 320,
       color: 'gray'
-      )
+    )
     %w[Queen Rook Bishop Night].each_with_index do |piece_type, i|
       piece_image = Image.new("pieces/#{@current_turn[0]}#{piece_type[0]}.png", x: @clicked_piece.x, y: @clicked_piece.y + i * 80, width: 80, height: 80, z: 5)
       @promotion_options << [piece_image, piece_type]
@@ -358,6 +356,7 @@ class Game
         piece.generate_moves  # This will now handle check situations
       end
 
+      
       # Check for checkmate - if no pieces have legal moves
       if @valid_moves.nil? && king.moves.empty?
         checkmate_ui
