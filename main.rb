@@ -7,7 +7,7 @@ module ZOrder
 end
 
 class Sounds
-  attr_reader :capture, :castle, :illegal, :move_check, :move_self, :move_opponent, :promote, :game_start, :game_end
+  attr_reader :capture, :castle, :illegal, :move_check, :move_self, :promote, :game_start, :game_end
 
   def initialize
     @capture = Music.new("sounds/capture.mp3")
@@ -15,7 +15,6 @@ class Sounds
     @illegal = Music.new("sounds/illegal.mp3")
     @move_check = Music.new("sounds/move_check.mp3")
     @move_self = Music.new("sounds/move_self.mp3")
-    @move_opponent = Music.new("sounds/move_opponent.mp3")
     @game_start = Music.new("sounds/game_start.mp3")
     @game_end = Music.new("sounds/game_end.mp3")
     @promote = Music.new("sounds/promote.mp3")
@@ -46,7 +45,6 @@ def piece_image(piece)
   when PieceEval::BISHOP then "pieces/#{color}b.png"
   when PieceEval::KNIGHT then "pieces/#{color}n.png"
   when PieceEval::PAWN   then "pieces/#{color}p.png"
-  else nil
   end
 end
 
@@ -96,7 +94,7 @@ class Game
           size: 80,
           z: ZOrder::BOARD,
           color: square_color
-          )
+        )
 
         # Get the piece at the current position
         piece_pos = @board[file][rank]
@@ -256,8 +254,6 @@ class Game
     if !castle_flag && !capture_flag && !promotion_flag && !en_passant_flag
       @sounds.move_self.play 
     end
-
-
   end
   
   def undo_move
@@ -298,7 +294,6 @@ class Game
     @pieces.delete(target_piece)
     @sounds.capture.play
     @clicked_piece.capture_piece = target_piece
-    puts @pieces.size.to_i
   end
 
   def promotion_menu()
@@ -350,18 +345,25 @@ class Game
     end
   end
 
-  def in_checked()
+  def in_checked
     king = @pieces.find { |p| p.type == "King" && p.color == @current_turn.to_s.capitalize }
-    if king.is_checked?()
-      @sounds.move_check.play
+    return unless king
 
-      @valid_moves = king.handle_check()
-      if @valid_moves.size == 0
+    if king.is_checked?
+      @sounds.move_check.play
+      @checked = true
+      
+      # Generate valid moves for all pieces of the current color
+      @pieces.each do |piece|
+        next if piece.color != king.color
+        piece.generate_moves  # This will now handle check situations
+      end
+      
+      # Check for checkmate - if no pieces have legal moves
+      if @pieces.none? { |p| p.color == king.color && p.moves.empty? }
         checkmate
       end
-      @checked = true
     else
-      @valid_moves = nil
       @checked = false
     end
   end
@@ -369,7 +371,6 @@ class Game
   def checkmate
     @game_over = true
     @sounds.game_end.play
-    # Semi-transparent overlay
     @overlay = Rectangle.new(
       x: 0,
       y: 0,
@@ -431,6 +432,7 @@ class Game
     end
   end
   def delete_illegal_moves()
+    return if !@clicked_piece
     if @clicked_piece.type != "King"
       illegal_moves = @clicked_piece.moves - @valid_moves
       illegal_moves.each do |illegal_move|
@@ -444,7 +446,7 @@ class Game
   # Move the clicked piece to the new coordinates
   def render_at_new_pos(rank, file)
     @clicked_piece.is_moved = true
-    @clicked_piece.render.remove
+    @clicked_piece.render.remove  
     @clicked_piece.x = rank * 80 
     @clicked_piece.y = file * 80
     @clicked_piece.render_piece
@@ -453,7 +455,13 @@ class Game
   # Highlight the illegal move visually
   def highlight_illegal_move(piece)
     # Flash the piece briefly in red or create another effect to show the illegal attempt
-    flash_square = Square.new(x: piece.x, y: piece.y, z: ZOrder::OVERLAP, size: 80, color: "red")
+    flash_square = Square.new(
+      x: piece.x,
+      y: piece.y,
+      z: ZOrder::OVERLAP,
+      size: 80,
+      color: "red"
+    )
     flash_square.color.opacity = 0.8
   
     # After a short delay, remove the red flash (simulating feedback)
@@ -467,7 +475,13 @@ class Game
   def highlight_selected_piece(x, y)
     clear_previous_selection(only_moves: false)
 
-    @clicked_square = Square.new(x: x, y: y, z: ZOrder::OVERLAP, size: 80, color: "#B58B37")
+    @clicked_square = Square.new(
+      x: x,
+      y: y,
+      z: ZOrder::OVERLAP,
+      size: 80,
+      color: "#B58B37"
+    )
     @clicked_square.color.opacity = 0.8
     draw_possible_moves(@clicked_piece)
   end
@@ -516,7 +530,6 @@ class Game
     draw_board
   end
 end
-
 
 set width: 640, height: 640
 
