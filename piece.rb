@@ -5,8 +5,8 @@ class Piece
   attr_reader :piece, :position, :render
   attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
-  def initialize(x, y, piece, piece_image, game)
-    @x, @y, @piece, @piece_image, @game = x, y, piece, piece_image, game
+  def initialize(x, y, piece, piece_image, board)
+    @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
     @moves = Set.new()
     @cached_moves = Set.new()
     @bot = false
@@ -89,13 +89,13 @@ class Piece
   end
 
   def find_castling_rook(file_position)
-    @game.pieces.find { |p| p.type == "Rook" && !p.is_moved && p.color == color && p.x == file_position }
+    @board.pieces.find { |p| p.type == "Rook" && !p.is_moved && p.color == color && p.x == file_position }
   end
 
   def no_pieces_between(rook)
     king_file, rook_file = @x / 80, rook.x / 80
     range = (rook_file < king_file ? (rook_file + 1)...king_file : (king_file + 1)...rook_file)
-    range.none? { |file| @game.pieces.find { |p| p.x == file * 80 && p.y == @y} }
+    range.none? { |file| @board.pieces.find { |p| p.x == file * 80 && p.y == @y} }
   end
 
   def is_checked?(rank = @x / 80, file = @y / 80)
@@ -103,7 +103,7 @@ class Piece
     king_position = [rank, file]
 
     @is_checked = false  # Reset only if we don’t find any threats
-    @game.pieces.each do |piece|
+    @board.pieces.each do |piece|
       next if piece.color == color || piece.type == "King" # Only consider opponent pieces
       generate_bot_moves(piece)
       
@@ -122,7 +122,7 @@ class Piece
     blocking_squares = calculate_blocking_squares(attacking_piece) 
     legal_moves.add([attacking_piece.rank, attacking_piece.file])
     puts blocking_squares.inspect
-    if @attacking_pieces.size >= 2 # Double check or more
+    if @attacking_pieces.size == 2 # Double check or more
       king_moves  # Force the king to move
     elsif blocking_squares.any?  # Single check
       piece.moves.each do |move|
@@ -140,17 +140,17 @@ class Piece
 
   def is_pinned?
     return if type == "King"
-    king = @game.pieces.find { |p| p.type == "King" && p.color == color && p.is_checked == false}
+    king = @board.pieces.find { |p| p.type == "King" && p.color == color && p.is_checked == false}
     if king 
-      @game.pieces.delete(self)
+      @board.pieces.delete(self)
       if king.is_checked?()
-        @game.valid_moves = king.handle_check(self)
+        @board.valid_moves = king.handle_check(self)
         @is_pinned = true
       else
         @is_pinned = false
       end
     end
-    @game.pieces.add(self)
+    @board.pieces.add(self)
 
   end
   # Function to calculate potential blocking squares between the king and the attacking piece
@@ -235,21 +235,21 @@ class Piece
   end
 
   private def empty_square?(x, y)
-    !@game.pieces.find { |p| p.x == x * 80 && p.y == y * 80 }
+    !@board.pieces.find { |p| p.x == x * 80 && p.y == y * 80 }
   end
 
   private def capture_pawn(target_rank, target_file)
-    target_piece = @game.pieces.find { |p| p.x == target_rank * 80 && p.y == target_file * 80 }
+    target_piece = @board.pieces.find { |p| p.x == target_rank * 80 && p.y == target_file * 80 }
     if (target_piece && target_piece.color != color) || @bot
       add_move_if_legal(target_rank, target_file) 
     end
   end
 
   private def add_en_passant_moves(rank, file, direction)
-    if @game.last_move&.type == "Pawn" && @game.last_move.can_en_passant
+    if @board.last_move&.type == "Pawn" && @board.last_move.can_en_passant
       en_passant_positions = [[rank - 1, file], [rank + 1, file]]
       en_passant_positions.each do |target_rank, _|
-        add_move_if_legal(target_rank, file + direction) if @game.last_move.x == target_rank * 80 && @game.last_move.y == @y
+        add_move_if_legal(target_rank, file + direction) if @board.last_move.x == target_rank * 80 && @board.last_move.y == @y
       end
     end
   end
@@ -270,7 +270,7 @@ class Piece
   private def add_move_if_legal(new_x, new_y)
     return false unless new_x.between?(0, 7) && new_y.between?(0, 7)
     
-    target_piece = @game.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80}
+    target_piece = @board.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80}
     # Empty square or perform a xray attack  
     if target_piece.nil? || (target_piece.type == "King" && target_piece.color != color)
       @moves.add([new_x, new_y])
