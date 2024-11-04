@@ -98,11 +98,11 @@ class Piece
     range.none? { |file| @game.pieces.find { |p| p.x == file * 80 && p.y == @y} }
   end
 
-  def is_checked?(dx = @x / 80, dy = @y / 80)
+  def is_checked?(rank = @x / 80, file = @y / 80)
   
-    king_position = [dx, dy]
+    king_position = [rank, file]
+
     @is_checked = false  # Reset only if we don’t find any threats
-    
     @game.pieces.each do |piece|
       next if piece.color == color || piece.type == "King" # Only consider opponent pieces
       generate_bot_moves(piece)
@@ -116,7 +116,7 @@ class Piece
     return @is_checked  # Return the current status of @checked
   end
   
-  def handle_check()
+  def handle_check(piece)
     attacking_piece = @attacking_pieces.first
     legal_moves = Set.new()
     blocking_squares = calculate_blocking_squares(attacking_piece) 
@@ -125,16 +125,12 @@ class Piece
     if @attacking_pieces.size >= 2 # Double check or more
       king_moves  # Force the king to move
     elsif blocking_squares.any?  # Single check
-      @game.pieces.each do |piece|
-        next if piece.color != color
-        piece.generate_moves
-        piece.moves.each do |move|
-          if piece.type == "Pawn"
-            puts move.inspect
-          end
-          if blocking_squares.include?(move)
-            legal_moves.add(move)
-          end
+      piece.moves.each do |move|
+        if piece.type == "Pawn"
+          puts move.inspect
+        end
+        if blocking_squares.include?(move)
+          legal_moves.add(move)
         end
       end
     end
@@ -148,7 +144,7 @@ class Piece
     if king 
       @game.pieces.delete(self)
       if king.is_checked?()
-        @game.valid_moves = king.handle_check()
+        @game.valid_moves = king.handle_check(self)
         @is_pinned = true
       else
         @is_pinned = false
@@ -158,7 +154,7 @@ class Piece
 
   end
   # Function to calculate potential blocking squares between the king and the attacking piece
-  private def calculate_blocking_squares(attacking_piece)
+  def calculate_blocking_squares(attacking_piece)
     blocking_squares = Set.new
   
     # Calculate the direction of the attack (dx and dy represent the unit step in each direction)
@@ -171,15 +167,20 @@ class Piece
   
     # Calculate intermediate squares between king and attacking piece, including up to the attacking piece's position
     x, y = @x + dx * 80, @y + dy * 80
+    count = 0
     if attacking_piece.type != "Knight"
       while [x, y] != [attacking_piece.x + dx * 80, attacking_piece.y + dy * 80]
+        if count == 10
+          break
+        end
         blocking_squares.add([x / 80, y / 80])
         x += dx * 80
         y += dy * 80
+        count += 1
       end
     end
   
-    blocking_squares.to_a
+    return blocking_squares.to_a
   end
   
   def generate_bot_moves(piece)

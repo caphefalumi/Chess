@@ -151,13 +151,14 @@ class Game
       @clicked_piece.is_pinned?
       delete_illegal_moves() if @valid_moves
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
+      draw_possible_moves()
       @is_piece_clicked = true
     end
   end
   
   # Highlights all possible moves for the selected piece
-  def draw_possible_moves(piece)
-    piece.moves.each do |move|
+  def draw_possible_moves()
+    @clicked_piece.moves.each do |move|
       move_circle = Circle.new(
         x: move[0] * 80 + 40,
         y: move[1] * 80 + 40,
@@ -345,22 +346,26 @@ class Game
   def in_checked
     king = @pieces.find { |p| p.type == "King" && p.color == @current_turn.to_s.capitalize }
     return unless king
-
+    checkmate = true
     if king.is_checked?
       @sounds.move_check.play
       @checked = true
-      
+      blocking_squares = king.calculate_blocking_squares(king.attacking_pieces.first) 
       # Generate valid moves for all pieces of the current color
       @pieces.each do |piece|
         next if piece.color != king.color
         piece.generate_moves  # This will now handle check situations
-      end
+        piece.moves.each do |move|
+          if blocking_squares.include?(move)
 
-      
-      # Check for checkmate - if no pieces have legal moves
-      if @valid_moves.nil? && king.moves.empty?
+            checkmate = false
+          end
+        end
+      end
+      if checkmate && king.moves.empty?
         checkmate_ui
       end
+      
     else
       @checked = false
     end
@@ -486,7 +491,6 @@ class Game
       color: "#B58B37"
     )
     @clicked_square.color.opacity = 0.8
-    draw_possible_moves(@clicked_piece)
   end
   
   def handle_illegal_move
