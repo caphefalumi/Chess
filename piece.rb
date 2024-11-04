@@ -1,5 +1,4 @@
 require 'rubygems'
-require 'ruby2d'
 require 'set'
 class Piece
   attr_reader :piece, :position, :render
