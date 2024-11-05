@@ -75,7 +75,7 @@ class Board
       [PieceEval::NONE] * 8,
       [PieceEval::NONE] * 8,
       [PieceEval::PAWN | PieceEval::WHITE] * 8,
-      [PieceEval::ROOK | PieceEval::WHITE, PieceEval::KNIGHT | PieceEval::WHITE, PieceEval::BISHOP | PieceEval::WHITE, PieceEval::QUEEN | PieceEval::WHITE, PieceEval::KING | PieceEval::WHITE, PieceEval::BISHOP | PieceEval::WHITE, PieceEval::KNIGHT | PieceEval::WHITE, PieceEval::ROOK | PieceEval::WHITE]
+      [PieceEval::KING | PieceEval::WHITE]
     ]
   end
 
@@ -197,7 +197,7 @@ class Board
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     move_piece(piece, rank, file)
 
-    if target_piece && target_piece.color == piece.color
+    if target_piece&.color == piece.color
       handle_illegal_move
 
     elsif target_piece
@@ -312,7 +312,7 @@ class Board
   end
 
   def handle_promotion()
-    for i in 0..3
+    (0..3).each do |i|
       image = @promotion_options[i][0]
       if area_clicked(image.x, image.y, image.x + image.width, image.y + image.height)
         selected_type = @promotion_options[i][1]
@@ -351,6 +351,7 @@ class Board
       @sounds.move_check.play
       @checked = true
       blocking_squares = king.calculate_blocking_squares(king.attacking_pieces.first) 
+      puts blocking_squares.inspect
       # Generate valid moves for all pieces of the current color
       @pieces.each do |piece|
         next if piece.color != king.color
@@ -439,8 +440,7 @@ class Board
   end
 
   def delete_illegal_moves()
-    return if !@clicked_piece
-    if @clicked_piece.type != "King"
+    if @clicked_piece&.type != "King"
       illegal_moves = @clicked_piece.moves - @valid_moves
       illegal_moves.each do |illegal_move|
         puts "#{@clicked_piece.name} cannot move to #{illegal_move}"

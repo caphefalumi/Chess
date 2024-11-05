@@ -7,7 +7,6 @@ class Piece
   def initialize(x, y, piece, piece_image, board)
     @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
     @moves = Set.new()
-    @cached_moves = Set.new()
     @bot = false
     @attacking_pieces = Set.new()
     @king_color = "White"
@@ -48,16 +47,26 @@ class Piece
 
   def type
     case @piece & 0b00111
-    when PieceEval::KING   then "King"
-    when PieceEval::QUEEN  then "Queen"
-    when PieceEval::ROOK   then "Rook"
-    when PieceEval::BISHOP then "Bishop"
-    when PieceEval::KNIGHT then "Knight"
-    when PieceEval::PAWN   then "Pawn"
-    else "None"
+      when PieceEval::KING   then "King"
+      when PieceEval::QUEEN  then "Queen"
+      when PieceEval::ROOK   then "Rook"
+      when PieceEval::BISHOP then "Bishop"
+      when PieceEval::KNIGHT then "Knight"
+      when PieceEval::PAWN   then "Pawn"
     end
   end
 
+  def get_value
+    case type
+      when "King" then 1000
+      when "Queen" then 90
+      when "Rook" then 50
+      when "Bishop" then 30
+      when "Knight" then 30
+      when "Pawn" then 10
+    end
+  end
+  
   def generate_moves()
     @moves.clear
     case type
@@ -100,7 +109,7 @@ class Piece
   def is_checked?(rank = @x / 80, file = @y / 80)
   
     king_position = [rank, file]
-
+    puts @is_checked
     @is_checked = false  # Reset only if we don’t find any threats
     @board.pieces.each do |piece|
       next if piece.color == color || piece.type == "King" # Only consider opponent pieces
@@ -254,7 +263,7 @@ class Piece
   end
 
   def promotion(choice)
-    piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Knight" => PieceEval::KNIGHT }
+    piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Night" => PieceEval::KNIGHT }
     new_piece_type = piece_map[choice] || PieceEval::QUEEN
     promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK))
   end

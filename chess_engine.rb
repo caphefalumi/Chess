@@ -10,6 +10,8 @@ class Engine
 
   def initialize(game)
     @game = game
+    @black_score = 0 
+    @white_score = 0
     pawn_value = 1
     knight_value = 3
     bishop_value = 3
@@ -18,7 +20,17 @@ class Engine
   end
 
   private def evaluate
-
+    @game.pieces.each do |piece|
+      if piece.color == "White"
+        @white_score += piece.get_value
+      else 
+        @black_score += piece.get_value
+      end
+    end
+  end
+  
+  def minimax(node, depth, maximizing_player)
+    
   end
   # Generates a random legal move for black
   def random
@@ -53,5 +65,8 @@ class Engine
         @game.current_turn = :white
       end
     end
+  end
+  private def valid_move(piece)
+
   end
 end
