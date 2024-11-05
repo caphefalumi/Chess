@@ -1,5 +1,6 @@
 require 'ruby2d'
 require 'set'
+require 'benchmark'
 require_relative 'piece'
 require_relative 'chess_engine'
 module ZOrder
@@ -75,7 +76,7 @@ class Board
       [PieceEval::NONE] * 8,
       [PieceEval::NONE] * 8,
       [PieceEval::PAWN | PieceEval::WHITE] * 8,
-      [PieceEval::KING | PieceEval::WHITE]
+      [PieceEval::ROOK | PieceEval::WHITE, PieceEval::KNIGHT | PieceEval::WHITE, PieceEval::BISHOP | PieceEval::WHITE, PieceEval::QUEEN | PieceEval::WHITE, PieceEval::KING | PieceEval::WHITE, PieceEval::BISHOP | PieceEval::WHITE, PieceEval::KNIGHT | PieceEval::WHITE, PieceEval::ROOK | PieceEval::WHITE]
     ]
   end
 
@@ -136,7 +137,7 @@ class Board
     @last_move = @clicked_piece
     # @current_turn = @current_turn == :white ? :black : :white
     # if @current_turn == :black
-    #   @engine.play_best_move
+    #   @engine.random
     # end
   end
 
@@ -295,23 +296,33 @@ class Board
   end
 
   def promotion_ui()
-    @promotion_options = Array.new()
-    @promotion_menu_rect = Rectangle.new(
-      x: @clicked_piece.x,
-      y: @clicked_piece.y,
-      z: ZOrder::PROMOTION,
-      width: 80,
-      height: 320,
-      color: 'gray'
-    )
-    %w[Queen Rook Bishop Night].each_with_index do |piece_type, i|
-      piece_image = Image.new("pieces/#{@current_turn[0]}#{piece_type[0]}.png", x: @clicked_piece.x, y: @clicked_piece.y + i * 80, width: 80, height: 80, z: 5)
-      @promotion_options << [piece_image, piece_type]
+    if @current_turn == :black
+      # Automatically promote black pawn to Queen
+      @clicked_piece.render.remove
+      @clicked_piece.promotion("Queen")
+      @promotion = false
+    elsif @current_turn == :white
+      # Display promotion UI for white pieces
+      puts "COTHA"
+      @promotion_options = Array.new()
+      @promotion_menu_rect = Rectangle.new(
+        x: @clicked_piece.x,
+        y: @clicked_piece.y,
+        z: ZOrder::PROMOTION,
+        width: 80,
+        height: 320,
+        color: 'gray'
+      )
+      %w[Queen Rook Bishop Night].each_with_index do |piece_type, i|
+        piece_image = Image.new("pieces/#{@clicked_piece.color[0]}#{piece_type[0]}.png", x: @clicked_piece.x, y: @clicked_piece.y + i * 80, width: 80, height: 80, z: 5)
+        @promotion_options << [piece_image, piece_type]
+      end
+      @promotion = true
     end
-    @promotion = true
   end
-
+  
   def handle_promotion()
+    puts "Ok"
     (0..3).each do |i|
       image = @promotion_options[i][0]
       if area_clicked(image.x, image.y, image.x + image.width, image.y + image.height)

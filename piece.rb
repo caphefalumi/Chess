@@ -272,7 +272,7 @@ class Piece
     @piece = new_piece_type
     @piece_image = piece_image(@piece)
     render_piece
-    puts "#{color} pawn promoted to #{type}!"
+    puts "#{color} promoted to #{type}!"
   end
 
   private def add_move_if_legal(new_x, new_y)
