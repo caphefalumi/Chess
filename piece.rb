@@ -121,7 +121,6 @@ class Piece
       if piece.moves.include?(king_position)
         @attacking_pieces.add(piece)
         @is_checked = true
-        break  # Exit early since we found a check
       end
     end
 
@@ -135,45 +134,15 @@ class Piece
     if king 
       @board.pieces.delete(self)
       if king.is_checked?()
+        @attacking_pieces = king.attacking_pieces
         @is_pinned = true
       else
         @is_pinned = false
       end
     end
     @board.pieces.add(self)
-
-  end
-  # Function to calculate potential blocking squares between the king and the attacking piece
-  def calculate_blocking_squares(attacking_piece)
-    blocking_squares = Set.new
-    
-    # Calculate direction vectors dx and dy
-    dx = (attacking_piece.x - @x) <=> 0
-    dy = (attacking_piece.y - @y) <=> 0
-    
-    # Initialize x and y positions one step away from the king
-    x, y = @x + dx * 80, @y + dy * 80
-    count = 0
-    
-    # Only calculate for non-knight pieces
-    if attacking_piece.type != "Knight"
-      # Iterate to add each blocking square until reaching the attacking piece
-      while [x, y] != [attacking_piece.x + dx * 80, attacking_piece.y + dy * 80]
-        break if count == 100  # Prevent infinite loop
-        
-        # Add square to blocking_squares, converting to board coordinates
-        blocking_squares.add([x / 80, y / 80])
-        
-        # Move to the next square in the direction of the attacker
-        x += dx * 80
-        y += dy * 80
-        count += 1
-      end
-    end
-  
-    blocking_squares.to_a
-  end
-  
+    return @is_pinned
+  end  
   
   def generate_bot_moves(piece)
     piece.bot = true

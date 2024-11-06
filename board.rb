@@ -155,7 +155,11 @@ class Board
     if @clicked_piece
       if !@checked
         @clicked_piece.generate_moves
-        @clicked_piece.is_pinned? 
+        if @clicked_piece.is_pinned?
+          king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color}
+          blocking_squares = calculate_blocking_squares(king.position, @clicked_piece.attacking_pieces.first)
+          @clicked_piece.moves -= illegal_moves(blocking_squares, @clicked_piece)
+        end
       end
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
       draw_possible_moves()
@@ -361,43 +365,68 @@ class Board
 
   def in_checked
     king = @pieces.find { |p| p.type == "King" && p.color == @current_turn.to_s.capitalize }
-    return unless king
-    no_legal_moves = true
+    @no_legal_moves = true
     if king.is_checked?
       @sounds.move_check.play
       @checked = true
-      blocking_squares = king.calculate_blocking_squares(king.attacking_pieces.first) 
-      puts blocking_squares.inspect
+      blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first) 
       # Generate valid moves for all pieces of the current color
       @pieces.each do |piece|
         next if piece.color != king.color
-        piece.generate_moves  # This will now handle check situations
-        tmp_moves = []
-        piece.moves.each do |move|
-          if !blocking_squares.include?(move)
-            tmp_moves << move
-          else
-            no_legal_moves = false
-          end
-        end
-        piece.moves -= tmp_moves
-        if piece.moves.any? 
-          puts piece.moves.inspect
-          puts "#{piece.type} #{piece.position}"
-          # piece.generate_moves
-          # puts piece.moves.inspect
-
-        end
+        piece.generate_moves
+        piece.moves -= illegal_moves(blocking_squares, piece) 
       end
-      if no_legal_moves && king.moves.empty?
+      if @no_legal_moves && king.moves.empty?
         checkmate_ui
       end
-      
     else
+      king.attacking_pieces.clear
       @checked = false
     end
   end
 
+  def illegal_moves(blocking_squares, piece)
+    tmp_moves = []
+    if piece.type != "King"
+      piece.moves.each do |move|
+        if !blocking_squares.include?(move)
+          tmp_moves << move
+        else
+          @no_legal_moves = false
+        end
+      end
+    end
+    return tmp_moves
+  end
+  def calculate_blocking_squares(king_pos, attacking_piece)
+    blocking_squares = Set.new
+    
+    # Calculate direction vectors dx and dy
+    dx = (attacking_piece.x - king_pos[0]) <=> 0
+    dy = (attacking_piece.y - king_pos[1]) <=> 0
+    
+    # Initialize x and y positions one step away from the king
+    x, y = king_pos[0] + dx * 80, king_pos[1] + dy * 80
+    count = 0
+    
+    # Only calculate for non-knight pieces
+    if attacking_piece.type != "Knight"
+      # Iterate to add each blocking square until reaching the attacking piece
+      while [x, y] != [attacking_piece.x + dx * 80, attacking_piece.y + dy * 80]
+        break if count == 100  # Prevent infinite loop
+        
+        # Add square to blocking_squares, converting to board coordinates
+        blocking_squares.add([x / 80, y / 80])
+        
+        # Move to the next square in the direction of the attacker
+        x += dx * 80
+        y += dy * 80
+        count += 1
+      end
+    end
+  
+    return blocking_squares.to_a
+  end
   def game_result_ui()
     @overlay = Rectangle.new(
       x: 0,
@@ -510,7 +539,6 @@ class Board
   
   def handle_illegal_move
     @sounds.illegal.play
-    @clicked_piece.moves.clear
     highlight_illegal_move(@clicked_piece)
     @illegal_state = true
   end
