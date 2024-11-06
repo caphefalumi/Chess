@@ -4,7 +4,7 @@ require 'set'
 
 
 class Piece
-  attr_reader :piece, :position, :render
+  attr_reader :piece, :position, :render, :blocking_squares
   attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
   def initialize(x, y, piece, piece_image, board)
@@ -124,27 +124,10 @@ class Piece
         break  # Exit early since we found a check
       end
     end
+
     return @is_checked  # Return the current status of @checked
   end
   
-  def handle_check(piece)
-    attacking_piece = @attacking_pieces.first
-    legal_moves = Set.new()
-    blocking_squares = calculate_blocking_squares(attacking_piece) 
-    legal_moves.add([attacking_piece.rank, attacking_piece.file])
-    if @attacking_pieces.size == 2 # Double check or more
-      king_moves  # Force the king to move
-    elsif blocking_squares.any?  # Single check
-      piece.moves.each do |move|
-        if piece.type == "Pawn"
-        end
-        if blocking_squares.include?(move)
-          legal_moves.add(move)
-        end
-      end
-    end
-    return legal_moves.to_a
-  end
 
   def is_pinned?
     return if type == "King"
@@ -152,7 +135,6 @@ class Piece
     if king 
       @board.pieces.delete(self)
       if king.is_checked?()
-        @board.valid_moves = king.handle_check(self)
         @is_pinned = true
       else
         @is_pinned = false
@@ -164,32 +146,34 @@ class Piece
   # Function to calculate potential blocking squares between the king and the attacking piece
   def calculate_blocking_squares(attacking_piece)
     blocking_squares = Set.new
-  
-    # Calculate the direction of the attack (dx and dy represent the unit step in each direction)
-    dx = (attacking_piece.x - @x) / 80
-    dy = (attacking_piece.y - @y) / 80
-  
-    # Ensure dx and dy are either -1, 0, or 1 to capture vertical, horizontal, or diagonal directions
-    dx = dx <=> 0
-    dy = dy <=> 0
-  
-    # Calculate intermediate squares between king and attacking piece, including up to the attacking piece's position
+    
+    # Calculate direction vectors dx and dy
+    dx = (attacking_piece.x - @x) <=> 0
+    dy = (attacking_piece.y - @y) <=> 0
+    
+    # Initialize x and y positions one step away from the king
     x, y = @x + dx * 80, @y + dy * 80
     count = 0
+    
+    # Only calculate for non-knight pieces
     if attacking_piece.type != "Knight"
+      # Iterate to add each blocking square until reaching the attacking piece
       while [x, y] != [attacking_piece.x + dx * 80, attacking_piece.y + dy * 80]
-        if count == 10
-          break
-        end
+        break if count == 100  # Prevent infinite loop
+        
+        # Add square to blocking_squares, converting to board coordinates
         blocking_squares.add([x / 80, y / 80])
+        
+        # Move to the next square in the direction of the attacker
         x += dx * 80
         y += dy * 80
         count += 1
       end
     end
   
-    return blocking_squares.to_a
+    blocking_squares.to_a
   end
+  
   
   def generate_bot_moves(piece)
     piece.bot = true

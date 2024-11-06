@@ -56,11 +56,12 @@ end
 
 class Board
   attr_reader :pieces, :last_move, :checked, :game_over
-  attr_accessor :clicked_piece, :current_turn, :valid_moves
+  attr_accessor :clicked_piece, :current_turn
   def initialize
     @sounds = Sounds.new
     @pieces = Set.new()
-    @moves = []
+    @moves = Set.new()
+    @valid_moves = Set.new()
     @clicked_piece = nil
     @last_move = nil
     @checked = false
@@ -140,11 +141,9 @@ class Board
   
   def turn
     @last_move = @clicked_piece
-    @engine.position_value(@clicked_piece)
+    # @engine.test()
     # @current_turn = @current_turn == :white ? :black : :white
-    # if @current_turn == :black
-    #   @engine.random
-    # end
+    # @engine.random
   end
 
   def area_clicked(leftX, topY, rightX, bottomY)
@@ -154,9 +153,10 @@ class Board
   def select_piece(rank, file)
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     if @clicked_piece
-      @clicked_piece.generate_moves
-      @clicked_piece.is_pinned?
-      delete_illegal_moves() if @valid_moves
+      if !@checked
+        @clicked_piece.generate_moves
+        @clicked_piece.is_pinned? 
+      end
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
       draw_possible_moves()
       @is_piece_clicked = true
@@ -183,7 +183,7 @@ class Board
         move_circle.color.opacity = 0.4
       end
   
-      @moves << move_circle
+      @moves.add(move_circle)
     end
   end  
   
@@ -362,22 +362,34 @@ class Board
   def in_checked
     king = @pieces.find { |p| p.type == "King" && p.color == @current_turn.to_s.capitalize }
     return unless king
-    checkmate = true
+    no_legal_moves = true
     if king.is_checked?
       @sounds.move_check.play
       @checked = true
       blocking_squares = king.calculate_blocking_squares(king.attacking_pieces.first) 
+      puts blocking_squares.inspect
       # Generate valid moves for all pieces of the current color
       @pieces.each do |piece|
         next if piece.color != king.color
         piece.generate_moves  # This will now handle check situations
+        tmp_moves = []
         piece.moves.each do |move|
-          if blocking_squares.include?(move)
-            checkmate = false
+          if !blocking_squares.include?(move)
+            tmp_moves << move
+          else
+            no_legal_moves = false
           end
         end
+        piece.moves -= tmp_moves
+        if piece.moves.any? 
+          puts piece.moves.inspect
+          puts "#{piece.type} #{piece.position}"
+          # piece.generate_moves
+          # puts piece.moves.inspect
+
+        end
       end
-      if checkmate && king.moves.empty?
+      if no_legal_moves && king.moves.empty?
         checkmate_ui
       end
       
@@ -451,17 +463,6 @@ class Board
       @game_result.remove
       @play_again_text.remove
       @play_again_button.remove
-    end
-  end
-
-  def delete_illegal_moves()
-    if @clicked_piece&.type != "King"
-      illegal_moves = @clicked_piece.moves - @valid_moves
-      illegal_moves.each do |illegal_move|
-        puts "#{@clicked_piece.name} cannot move to #{illegal_move}"
-      end
-      @clicked_piece.moves -= illegal_moves  if @checked || @clicked_piece.is_pinned
-      @valid_moves = nil unless @checked || @clicked_piece.is_pinned
     end
   end
 

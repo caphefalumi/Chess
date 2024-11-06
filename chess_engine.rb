@@ -13,45 +13,41 @@ class Engine
     @white_score = 0  
   end
 
-  def position_value(piece)
+  private def position_value(piece)
     
-    position = piece.file * 8 + piece.rank
+    rank = piece.color == "Black" ? 7 - piece.rank : piece.rank
+    position = piece.file * 8 + rank
     # puts "#{piece.rank} #{piece.rank}"
     table = case piece.type
-            when "Pawn"
-              PAWN_TABLE[position]
-            when "Knight"
-              KNIGHTS_TABLE[position]
-            when "Bishop"
-              BISHOPS_TABLE[position]
-            when "Rook"
-              ROOKS_TABLE[position]
-            when "Queen"
-              QUEENS_TABLE[position]
-            when "King"
-              KINGS_TABLE[position]
-            else
-              0
+            when "Pawn" then PAWN_TABLE
+            when "Knight" then KNIGHTS_TABLE
+            when "Bishop" then BISHOPS_TABLE
+            when "Rook" then ROOKS_TABLE
+            when "Queen" then QUEENS_TABLE
+            when "King" then KINGS_TABLE
             end
-    return table
+    return table[position]
   end
-  def evaluate
   
+  private def evaluate
+    @black_score = 0 
+    @white_score = 0  
     @board.pieces.each do |piece|
 
       if piece.color == "White"
-        @white_score += piece.get_value + position_value(piece)
+        @white_score += piece.get_value
       else
-        @black_score += piece.get_value + position_value(piece)
+        @black_score += piece.get_value
       end
     end
   end
   
 
   def test 
-    evaluate
-    puts @white_score
-    puts @black_score
+    
+    # evaluate
+    # puts @white_score
+    # puts @black_score
   end
   def minimax(node, depth, maximizing_player)
     
@@ -76,7 +72,7 @@ class Engine
 
     # Create a new thread for the delay
     Thread.new do
-      sleep(rand(0.1..1))  # Wait for 1 second
+      sleep(0.1)  # Wait for 1 second
       # Store the piece and move
       @board.clear_previous_selection(only_moves: false)
       @board.clicked_piece = piece_to_move
@@ -86,7 +82,6 @@ class Engine
         @board.make_move(move[0], move[1])
 
         # Switch turns to white after AI move
-        @board.current_turn = :white
       end
     end
   end
