@@ -2,6 +2,8 @@ require 'ruby2d'
 require_relative 'board'
 set width: 640, height: 640
 
+set title: "Chess"
+
 # Initialize Game
 board = Board.new
 

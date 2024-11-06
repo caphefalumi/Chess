@@ -1,5 +1,8 @@
-require 'rubygems'
 require 'set'
+
+
+
+
 class Piece
   attr_reader :piece, :position, :render
   attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :attacking_pieces, :is_pinned, :is_moved, :is_checked
@@ -58,14 +61,15 @@ class Piece
 
   def get_value
     case type
-      when "King" then 1000
-      when "Queen" then 90
-      when "Rook" then 50
-      when "Bishop" then 30
-      when "Knight" then 30
-      when "Pawn" then 10
+      when "King" then 10000
+      when "Queen" then 929
+      when "Rook" then 479
+      when "Bishop" then 320
+      when "Knight" then 280
+      when "Pawn" then 100
     end
   end
+
   
   def generate_moves()
     @moves.clear
@@ -109,7 +113,6 @@ class Piece
   def is_checked?(rank = @x / 80, file = @y / 80)
   
     king_position = [rank, file]
-    puts @is_checked
     @is_checked = false  # Reset only if we don’t find any threats
     @board.pieces.each do |piece|
       next if piece.color == color || piece.type == "King" # Only consider opponent pieces
@@ -129,20 +132,17 @@ class Piece
     legal_moves = Set.new()
     blocking_squares = calculate_blocking_squares(attacking_piece) 
     legal_moves.add([attacking_piece.rank, attacking_piece.file])
-    puts blocking_squares.inspect
     if @attacking_pieces.size == 2 # Double check or more
       king_moves  # Force the king to move
     elsif blocking_squares.any?  # Single check
       piece.moves.each do |move|
         if piece.type == "Pawn"
-          puts move.inspect
         end
         if blocking_squares.include?(move)
           legal_moves.add(move)
         end
       end
     end
-    puts legal_moves.inspect
     return legal_moves.to_a
   end
 

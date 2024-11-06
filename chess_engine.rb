@@ -1,6 +1,6 @@
 require 'rubygems'
 require 'ruby2d'
-
+require_relative 'eval_table'
 
 class Generate_moves
   
@@ -13,16 +13,46 @@ class Engine
     @white_score = 0  
   end
 
-  private def evaluate
+  def position_value(piece)
+    
+    position = piece.file * 8 + piece.rank
+    # puts "#{piece.rank} #{piece.rank}"
+    table = case piece.type
+            when "Pawn"
+              PAWN_TABLE[position]
+            when "Knight"
+              KNIGHTS_TABLE[position]
+            when "Bishop"
+              BISHOPS_TABLE[position]
+            when "Rook"
+              ROOKS_TABLE[position]
+            when "Queen"
+              QUEENS_TABLE[position]
+            when "King"
+              KINGS_TABLE[position]
+            else
+              0
+            end
+    return table
+  end
+  def evaluate
+  
     @board.pieces.each do |piece|
+
       if piece.color == "White"
-        @white_score += piece.get_value
-      else 
-        @black_score += piece.get_value
+        @white_score += piece.get_value + position_value(piece)
+      else
+        @black_score += piece.get_value + position_value(piece)
       end
     end
   end
   
+
+  def test 
+    evaluate
+    puts @white_score
+    puts @black_score
+  end
   def minimax(node, depth, maximizing_player)
     
   end

@@ -3,6 +3,11 @@ require 'set'
 require 'benchmark'
 require_relative 'piece'
 require_relative 'chess_engine'
+
+
+
+
+
 module ZOrder
   BOARD, OVERLAP, PIECE, PROMOTION = *0..3
 end
@@ -81,11 +86,11 @@ class Board
   end
 
   def draw_board
-    (0...8).each do |rank|
-      (0...8).each do |file|
+    (0..8).each do |rank|  # Count down from 7 to 0
+      (0...8).each do |file|       # Still count up from 0 to 7 for files
         is_light_square = (rank + file) % 2 != 0
         square_color = is_light_square ? "#6e4e36" : "#b99b75"
-
+  
         # Draw square
         Square.new(
           x: rank * 80,
@@ -94,7 +99,7 @@ class Board
           z: ZOrder::BOARD,
           color: square_color
         )
-
+  
         # Get the piece at the current position
         piece_pos = @board[file][rank]
         image_file = piece_image(piece_pos)
@@ -108,7 +113,7 @@ class Board
     end
     @sounds.game_start.play
   end
-
+  
   def handle_mouse_click(mouse)
     rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
     @mouse_x, @mouse_y = mouse.x, mouse.y
@@ -135,6 +140,7 @@ class Board
   
   def turn
     @last_move = @clicked_piece
+    @engine.position_value(@clicked_piece)
     # @current_turn = @current_turn == :white ? :black : :white
     # if @current_turn == :black
     #   @engine.random
@@ -296,14 +302,14 @@ class Board
   end
 
   def promotion_ui()
-    if @current_turn == :black
+    if @clicked_piece.color == "Black"
       # Automatically promote black pawn to Queen
       @clicked_piece.render.remove
       @clicked_piece.promotion("Queen")
       @promotion = false
-    elsif @current_turn == :white
+      turn
+    elsif @clicked_piece.color == "White"
       # Display promotion UI for white pieces
-      puts "COTHA"
       @promotion_options = Array.new()
       @promotion_menu_rect = Rectangle.new(
         x: @clicked_piece.x,
@@ -322,7 +328,6 @@ class Board
   end
   
   def handle_promotion()
-    puts "Ok"
     (0..3).each do |i|
       image = @promotion_options[i][0]
       if area_clicked(image.x, image.y, image.x + image.width, image.y + image.height)
@@ -362,7 +367,6 @@ class Board
       @sounds.move_check.play
       @checked = true
       blocking_squares = king.calculate_blocking_squares(king.attacking_pieces.first) 
-      puts blocking_squares.inspect
       # Generate valid moves for all pieces of the current color
       @pieces.each do |piece|
         next if piece.color != king.color
