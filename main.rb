@@ -14,6 +14,8 @@ end
 on :key_down do |event|
   if event.key == 'z'
     board.unmake_move
+  elsif event.key == 'y'
+    board.remake_move
   end
 end
 show
