@@ -154,13 +154,13 @@ class Board
   def select_piece(rank, file)
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     if @clicked_piece
-      @clicked_piece.generate_moves
-      in_checked(@clicked_piece)
-
-      if !@checked && @clicked_piece.is_pinned?
-        king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color}
-        blocking_squares = calculate_blocking_squares(king.position, @clicked_piece.attacking_pieces.first)
-        @clicked_piece.moves -= illegal_moves(blocking_squares, @clicked_piece)
+      if !@checked
+        @clicked_piece.generate_moves
+        if @clicked_piece.is_pinned?
+          king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color}
+          blocking_squares = calculate_blocking_squares(king.position, @clicked_piece.attacking_pieces.first)
+          @clicked_piece.moves -= illegal_moves(blocking_squares, @clicked_piece)
+        end
       end
       highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
       draw_possible_moves()
@@ -245,6 +245,7 @@ end
     end
     @move_history_past << piece
 
+    in_checked
     turn if !@promotion
     reset_state_after_move
   end
@@ -429,14 +430,22 @@ end
     end
   end
 
-  def in_checked(piece)
-    king = @pieces.find { |p| p.type == "King" && p.color == @current_turn }
-    if king&.is_checked?
+  def in_checked
+    king = @pieces.find { |p| p.type == "King" && p.color == @current_turn.to_s.capitalize }
+    @no_legal_moves = true
+    if !@checked && king&.is_checked?
       @sounds.move_check.play
       @checked = true
       blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first) 
       # Generate valid moves for all pieces of the current color
-      piece.moves -= illegal_moves(blocking_squares, piece) 
+      @pieces.each do |piece|
+        next if piece.color != king.color
+        piece.generate_moves
+        piece.moves -= illegal_moves(blocking_squares, piece) 
+      end
+      if @no_legal_moves && king.moves.empty?
+        checkmate_ui
+      end
     else
       king&.attacking_pieces.clear
       @checked = false
