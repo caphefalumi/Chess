@@ -1,10 +1,6 @@
-require 'rubygems'
-require 'ruby2d'
 require_relative 'eval_table'
 
-class Generate_moves
-  
-end
+
 class Engine
 
   def initialize(board)
@@ -30,27 +26,42 @@ class Engine
   end
   
   private def evaluate
-    @black_score = 0 
-    @white_score = 0  
+    black_score = 0 
+    white_score = 0  
     @board.pieces.each do |piece|
-
       if piece.color == "White"
-        @white_score += piece.get_value
+        white_score += piece.get_value
       else
-        @black_score += piece.get_value
+        black_score += piece.get_value
       end
     end
+    evaluation = white_score - black_score
+    perspective = @board.current_turn == :white ? 1 : -1
+    return evaluation * perspective
   end
   
 
-  def test 
-    
-    # evaluate
-    # puts @white_score
-    # puts @black_score
-  end
   def minimax(node, depth, maximizing_player)
-    
+    if depth == 0
+      return evaluate
+    end
+
+    if maximizing_player
+      max_eval = -Float::INFINITY
+      node.each do |child|
+        eval = minimax(child, depth - 1, false)
+        max_eval = [max_eval, eval].max
+      end
+      return max_eval
+    else
+      max_eval = Float::INFINITY
+      node.each do |child|
+        eval = minimax(child, depth - 1, true)
+        min_eval = [min_eval, eval].min
+      end
+      return min_eval
+    end
+
   end
   # Generates a random legal move for black
   def random
@@ -80,7 +91,6 @@ class Engine
       if @board.clicked_piece
         @board.highlight_selected_piece(@board.clicked_piece.x, @board.clicked_piece.y)
         @board.make_move(move[0], move[1])
-
         # Switch turns to white after AI move
       end
     end

@@ -10,6 +10,7 @@ board = Board.new
 on :mouse_down do |mouse|
   board.handle_mouse_click(mouse)
 end
+
 on :key_down do |event|
   if event.key == 'z'
     board.unmake_move
