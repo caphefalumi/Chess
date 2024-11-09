@@ -1,17 +1,20 @@
-require 'rubygems'
-require 'ruby2d'
 require 'set'
+
+
+
+
 class Piece
-  attr_reader :piece, :position, :render
+  attr_reader :piece, :position, :render, :blocking_squares
   attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
   def initialize(x, y, piece, piece_image, board)
     @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
-    @moves = Set.new()
-    @cached_moves = Set.new()
-    @bot = false
     @attacking_pieces = Set.new()
-    @king_color = "White"
+    @moves = Set.new()
+    @pre_x = Array.new()
+    @pre_y = Array.new()
+    @capture_piece = Array.new()
+    @bot = false
     @is_moved = false
     @is_pinned = false
     @is_checked = false
@@ -40,7 +43,7 @@ class Piece
   end
 
   def name
-    color + type if type != "No Piece"
+    color + type
   end
 
   def color
@@ -49,16 +52,28 @@ class Piece
 
   def type
     case @piece & 0b00111
-    when PieceEval::KING   then "King"
-    when PieceEval::QUEEN  then "Queen"
-    when PieceEval::ROOK   then "Rook"
-    when PieceEval::BISHOP then "Bishop"
-    when PieceEval::KNIGHT then "Knight"
-    when PieceEval::PAWN   then "Pawn"
-    else "None"
+      when PieceEval::KING   then "King"
+      when PieceEval::QUEEN  then "Queen"
+      when PieceEval::ROOK   then "Rook"
+      when PieceEval::BISHOP then "Bishop"
+      when PieceEval::KNIGHT then "Knight"
+      when PieceEval::PAWN   then "Pawn"
+      else ""
     end
   end
 
+  def get_value
+    case type
+      when "King" then 10000
+      when "Queen" then 930
+      when "Rook" then 480
+      when "Bishop" then 320
+      when "Knight" then 280
+      when "Pawn" then 100
+    end
+  end
+
+  
   def generate_moves()
     @moves.clear
     case type
@@ -70,10 +85,12 @@ class Piece
   end
 
   def generate_attack_moves 
-    if @king_color != color
+    king_color = @board.pieces.find { |p| p.type == "King" && p.color == @current_turn }
+    if king_color != color
       generate_moves
     end
   end
+
   def king_moves
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx,dy|
@@ -88,102 +105,60 @@ class Piece
     end
   end
 
-  def find_castling_rook(file_position)
+  private def find_castling_rook(file_position)
     @board.pieces.find { |p| p.type == "Rook" && !p.is_moved && p.color == color && p.x == file_position }
   end
 
-  def no_pieces_between(rook)
-    king_file, rook_file = @x / 80, rook.x / 80
-    range = (rook_file < king_file ? (rook_file + 1)...king_file : (king_file + 1)...rook_file)
-    range.none? { |file| @board.pieces.find { |p| p.x == file * 80 && p.y == @y} }
+  private def no_pieces_between(rook)
+    king_file = @x / 80
+    rook_file = rook.x / 80
+  
+    # Determine the range of files to check between King and Rook
+    files_between = (king_file < rook_file) ? (king_file + 1...rook_file) : (rook_file + 1...king_file)
+  
+    # Check if any pieces exist in the specified range on the same rank (@y)
+    files_between.each do |file|
+      return false if @board.pieces.any? { |piece| piece.x == file * 80 && piece.y == @y }
+    end
+  
+    true
   end
+  
 
   def is_checked?(rank = @x / 80, file = @y / 80)
   
     king_position = [rank, file]
-
-    @is_checked = false  # Reset only if we don’t find any threats
+    @is_checked = false
     @board.pieces.each do |piece|
       next if piece.color == color || piece.type == "King" # Only consider opponent pieces
       generate_bot_moves(piece)
-      
       if piece.moves.include?(king_position)
+        break if @attacking_pieces.size > 2
         @attacking_pieces.add(piece)
         @is_checked = true
-        break  # Exit early since we found a check
       end
     end
-    return @is_checked  # Return the current status of @checked
+    return @is_checked
   end
   
-  def handle_check(piece)
-    attacking_piece = @attacking_pieces.first
-    legal_moves = Set.new()
-    blocking_squares = calculate_blocking_squares(attacking_piece) 
-    legal_moves.add([attacking_piece.rank, attacking_piece.file])
-    puts blocking_squares.inspect
-    if @attacking_pieces.size == 2 # Double check or more
-      king_moves  # Force the king to move
-    elsif blocking_squares.any?  # Single check
-      piece.moves.each do |move|
-        if piece.type == "Pawn"
-          puts move.inspect
-        end
-        if blocking_squares.include?(move)
-          legal_moves.add(move)
-        end
-      end
-    end
-    puts legal_moves.inspect
-    return legal_moves.to_a
-  end
 
   def is_pinned?
-    return if type == "King"
+    return false if type == "King"
     king = @board.pieces.find { |p| p.type == "King" && p.color == color && p.is_checked == false}
     if king 
       @board.pieces.delete(self)
       if king.is_checked?()
-        @board.valid_moves = king.handle_check(self)
+        @attacking_pieces = king.attacking_pieces
         @is_pinned = true
       else
         @is_pinned = false
       end
     end
     @board.pieces.add(self)
-
-  end
-  # Function to calculate potential blocking squares between the king and the attacking piece
-  def calculate_blocking_squares(attacking_piece)
-    blocking_squares = Set.new
+    return @is_pinned
+  end  
   
-    # Calculate the direction of the attack (dx and dy represent the unit step in each direction)
-    dx = (attacking_piece.x - @x) / 80
-    dy = (attacking_piece.y - @y) / 80
-  
-    # Ensure dx and dy are either -1, 0, or 1 to capture vertical, horizontal, or diagonal directions
-    dx = dx <=> 0
-    dy = dy <=> 0
-  
-    # Calculate intermediate squares between king and attacking piece, including up to the attacking piece's position
-    x, y = @x + dx * 80, @y + dy * 80
-    count = 0
-    if attacking_piece.type != "Knight"
-      while [x, y] != [attacking_piece.x + dx * 80, attacking_piece.y + dy * 80]
-        if count == 10
-          break
-        end
-        blocking_squares.add([x / 80, y / 80])
-        x += dx * 80
-        y += dy * 80
-        count += 1
-      end
-    end
-  
-    return blocking_squares.to_a
-  end
-  
-  def generate_bot_moves(piece)
+  private def generate_bot_moves(piece)
     piece.bot = true
     piece.generate_attack_moves
     piece.bot = false
@@ -255,7 +230,7 @@ class Piece
   end
 
   def promotion(choice)
-    piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Knight" => PieceEval::KNIGHT }
+    piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Night" => PieceEval::KNIGHT }
     new_piece_type = piece_map[choice] || PieceEval::QUEEN
     promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK))
   end
@@ -264,7 +239,7 @@ class Piece
     @piece = new_piece_type
     @piece_image = piece_image(@piece)
     render_piece
-    puts "#{color} pawn promoted to #{type}!"
+    puts "#{color} promoted to #{type}!"
   end
 
   private def add_move_if_legal(new_x, new_y)
@@ -280,7 +255,7 @@ class Piece
       @moves.add([new_x, new_y])
       false
     # Protect a friendly piece
-    elsif target_piece.color == color && color == "Black" && @bot
+    elsif target_piece.color == color && @bot
       @moves.add([new_x, new_y])
       false
     end
