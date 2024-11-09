@@ -13,6 +13,9 @@ class Piece
     @bot = false
     @attacking_pieces = Set.new()
     @king_color = "White"
+    @pre_x = Array.new()
+    @pre_y = Array.new()
+    @capture_piece = Array.new()
     @is_moved = false
     @is_pinned = false
     @is_checked = false
@@ -62,8 +65,8 @@ class Piece
   def get_value
     case type
       when "King" then 10000
-      when "Queen" then 929
-      when "Rook" then 479
+      when "Queen" then 930
+      when "Rook" then 480
       when "Bishop" then 320
       when "Knight" then 280
       when "Pawn" then 100
@@ -82,10 +85,12 @@ class Piece
   end
 
   def generate_attack_moves 
-    if @king_color != color
+    king_color = @board.pieces.find { |p| p.type == "King" && p.color == @current_turn }
+    if king_color != color
       generate_moves
     end
   end
+
   def king_moves
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx,dy|
@@ -110,26 +115,26 @@ class Piece
     range.none? { |file| @board.pieces.find { |p| p.x == file * 80 && p.y == @y} }
   end
 
+
   def is_checked?(rank = @x / 80, file = @y / 80)
   
     king_position = [rank, file]
-    @is_checked = false  # Reset only if we don’t find any threats
+    @is_checked = false
     @board.pieces.each do |piece|
       next if piece.color == color || piece.type == "King" # Only consider opponent pieces
       generate_bot_moves(piece)
-      
       if piece.moves.include?(king_position)
+        break if @attacking_pieces.size > 2
         @attacking_pieces.add(piece)
         @is_checked = true
       end
     end
-
-    return @is_checked  # Return the current status of @checked
+    return @is_checked
   end
   
 
   def is_pinned?
-    return if type == "King"
+    return false if type == "King"
     king = @board.pieces.find { |p| p.type == "King" && p.color == color && p.is_checked == false}
     if king 
       @board.pieces.delete(self)
@@ -241,7 +246,7 @@ class Piece
       @moves.add([new_x, new_y])
       false
     # Protect a friendly piece
-    elsif target_piece.color == color && color == "Black" && @bot
+    elsif target_piece.color == color && @bot
       @moves.add([new_x, new_y])
       false
     end
