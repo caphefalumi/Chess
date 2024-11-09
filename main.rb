@@ -18,6 +18,10 @@ on :key_down do |event|
     board.remake_move
   elsif event.key == 'r'
     board.reset_board
+  elsif event.key == 'd'
+    board.get_moves
+  elsif event.key == 'p'
+    close
   end
 end
 show

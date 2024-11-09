@@ -195,12 +195,12 @@ class Board
   end  
 
   def get_moves
-    available_moves = []
-
+    available_moves = {}
+    pieces = @pieces.dup
     # Find all pieces for the current turn and calculate their moves
-    @pieces.each do |piece|
+    pieces.each do |piece|
       next if piece.color != @current_turn # Skip pieces of the other color
-
+      king = @pieces.find { |p| p.type == "King" && p.color == @current_turn }
       # Generate legal moves for this piece
       piece.generate_moves
 
@@ -210,11 +210,11 @@ class Board
       else
         handle_pin(piece, king)
       end
-
+      # puts piece.name
       # Add valid moves for this piece to the list, including its position
-      available_moves << [ piece, [piece.rank, piece.file], piece.moves ]
+      available_moves[piece] = { position: [piece.rank, piece.file], moves: piece.moves }
     end
-
+    puts available_moves[]
     return available_moves
   end
 
@@ -500,7 +500,9 @@ class Board
   end
 
   def handle_pin(piece, king)
+    puts "ALPAH"
     if piece.type != "King" && piece.is_pinned?
+      puts "Ok"
       update_legal_moves(piece, king)
     end
   end
@@ -538,7 +540,6 @@ class Board
     
     # Only calculate for non-knight pieces
     if attacking_piece.type == "Knight"
-      puts "OK"
       blocking_squares.add([attacking_piece.rank, attacking_piece.file])
     else
       # Iterate to add each blocking square until reaching the attacking piece
@@ -557,6 +558,7 @@ class Board
   
     return blocking_squares.to_a
   end
+  
   def game_result_ui()
     @overlay = Rectangle.new(
       x: 0,
