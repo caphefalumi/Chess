@@ -199,20 +199,20 @@ class Board
 
     # Find all pieces for the current turn and calculate their moves
     @pieces.each do |piece|
-      next if piece.color != @current_turn.to_s.capitalize # Skip pieces of the other color
+      next if piece.color != @current_turn # Skip pieces of the other color
 
       # Generate legal moves for this piece
       piece.generate_moves
 
       # For pieces that are pinned, calculate the blocking squares
       if @checked
-        handle_pin(piece, king) 
+        handle_check(piece, king) 
       else
-        handle_check(piece, king)
+        handle_pin(piece, king)
       end
 
       # Add valid moves for this piece to the list, including its position
-      available_moves << { piece: piece, from: [piece.x / 80, piece.y / 80], to: piece.moves }
+      available_moves << [ piece, [piece.rank, piece.file], piece.moves ]
     end
 
     return available_moves
@@ -243,7 +243,6 @@ class Board
       capture_piece(piece, target_piece)
     end
     @move_history_past << piece
-    # @number_of_moves += 1
     is_check
     
     turn if !@promotion
@@ -254,8 +253,21 @@ class Board
   def is_check
     king = @pieces.find { |p| p.type == "King" && p.color != @clicked_piece.color }
     if king&.is_checked?()
-      @sounds.move_check.play
-      @checked = true
+      @no_legal_moves = true
+      blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first)
+      @pieces.each do |loop_piece|
+        next if loop_piece.color == king.color || loop_piece.type == "King"
+        loop_piece.generate_moves
+        if loop_piece.moves.include?(blocking_squares)
+          @no_legal_moves = false
+        end
+      end
+      if @no_legal_moves
+        checkmate_ui
+      else
+        @sounds.move_check.play
+        @checked = true
+      end
     else
       king&.attacking_pieces.clear
       @checked = false
@@ -348,7 +360,7 @@ class Board
   
     # Switch turn back to the previous player
     @current_turn = @current_turn == "White" ? "Black" : "White"
-    @number_of_moves -=1
+    @number_of_moves -= 1
   end
   
 
@@ -458,6 +470,7 @@ class Board
       piece.moves.clear
     else
       update_legal_moves(piece, king)
+
     end
   end
 

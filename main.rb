@@ -16,6 +16,8 @@ on :key_down do |event|
     board.unmake_move
   elsif event.key == 'y'
     board.remake_move
+  elsif event.key == 'r'
+    board.reset_board
   end
 end
 show

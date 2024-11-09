@@ -88,70 +88,43 @@ class Engine
 
   private
 
-  def minimax_eval(depth, is_maximizing)
+  def minimax(depth, maximizing_player, maximizing_color)
     # Base case: if we've reached max depth or game over
     if depth == 0 || @board.game_over
-
+      return nil, evaluate(maximizing_color)
     end
-
-    current_pieces = @board.pieces.select { |p| p.color == (is_maximizing ? "White" : "Black") }
-    current_tmp_pieces = current_pieces.dup
-    if is_maximizing
+    moves = @board.get_moves
+    best_move = moves.sample
+    if maximizing_player
       max_eval = -Float::INFINITY
       
-      current_tmp_pieces.each do |piece|
-        piece.generate_moves
-        piece.moves.each do |move|
-          temp_state = make_temp_move(piece, move)
-          eval = minimax_eval(depth - 1, false)
-          undo_temp_move(piece, temp_state)
-          max_eval = [max_eval, eval].max
+      moves.each do |move|
+        @board.make_move(move[0], move[1], move[2])
+        current_eval = minimax(depth - 1, false, maximizing_color)[1]
+        @board.unmake_move()
+        if current_eval > max_eval
+          max_eval = current_eval
+          best_move = move
         end
       end
-      
       return max_eval
     else
       min_eval = Float::INFINITY
       
-      current_tmp_pieces.each do |piece|
-        piece.generate_moves
-        piece.moves.each do |move|
-          temp_state = make_temp_move(piece, move)
-          eval = minimax_eval(depth - 1, true)
-          undo_temp_move(piece, temp_state)
-          min_eval = [min_eval, eval].min
+      moves.each do |move|
+        @board.make_move(move[0], move[1], move[2])
+        current_eval = minimax(depth - 1, true, maximizing_color)[1]
+        @board.unmake_move()
+        if current_eval < min_eval
+          min_eval = current_eval
+          best_move = move
         end
       end
+      return best_move, min_eval
       
-      return min_eval
     end
   end
 
-  def evaluate_position
-    score = 0
-    
-    @board.pieces.each do |piece|
-      # Basic material evaluation
-      value = piece.get_value
-      multiplier = piece.color == "White" ? -1 : 1  # Reversed since black is maximizing
-      score += value * multiplier
-      
-      # Simple positional bonuses
-      case piece.type
-      when "Pawn"
-        # Encourage pawn advancement
-        advance_bonus = piece.color == "Black" ? piece.file : (7 - piece.file)
-        score += advance_bonus * multiplier
-      when "Knight", "Bishop"
-        # Encourage piece development
-        if piece.is_moved
-          score += 10 * multiplier
-        end
-      end
-    end
-    
-    score
-  end
   # Generates a random legal move for black
   public def random
     pieces = @board.pieces.select { |p| p.color == @board.current_turn}
@@ -177,7 +150,7 @@ class Engine
 
     # Create a new thread for the delay
     Thread.new do
-      sleep(1)  # Wait for 1 second
+      sleep(rand(1..1))  # Wait for 1 second
       # Store the piece and move
       @board.clear_previous_selection(only_moves: false)
       @board.clicked_piece = piece_to_move

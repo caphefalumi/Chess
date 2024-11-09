@@ -9,13 +9,12 @@ class Piece
 
   def initialize(x, y, piece, piece_image, board)
     @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
-    @moves = Set.new()
-    @bot = false
     @attacking_pieces = Set.new()
-    @king_color = "White"
+    @moves = Set.new()
     @pre_x = Array.new()
     @pre_y = Array.new()
     @capture_piece = Array.new()
+    @bot = false
     @is_moved = false
     @is_pinned = false
     @is_checked = false
@@ -44,7 +43,7 @@ class Piece
   end
 
   def name
-    color + type if type != "No Piece"
+    color + type
   end
 
   def color
@@ -59,6 +58,7 @@ class Piece
       when PieceEval::BISHOP then "Bishop"
       when PieceEval::KNIGHT then "Knight"
       when PieceEval::PAWN   then "Pawn"
+      else ""
     end
   end
 
@@ -105,16 +105,25 @@ class Piece
     end
   end
 
-  def find_castling_rook(file_position)
+  private def find_castling_rook(file_position)
     @board.pieces.find { |p| p.type == "Rook" && !p.is_moved && p.color == color && p.x == file_position }
   end
 
-  def no_pieces_between(rook)
-    king_file, rook_file = @x / 80, rook.x / 80
-    range = (rook_file < king_file ? (rook_file + 1)...king_file : (king_file + 1)...rook_file)
-    range.none? { |file| @board.pieces.find { |p| p.x == file * 80 && p.y == @y} }
+  private def no_pieces_between(rook)
+    king_file = @x / 80
+    rook_file = rook.x / 80
+  
+    # Determine the range of files to check between King and Rook
+    files_between = (king_file < rook_file) ? (king_file + 1...rook_file) : (rook_file + 1...king_file)
+  
+    # Check if any pieces exist in the specified range on the same rank (@y)
+    files_between.each do |file|
+      return false if @board.pieces.any? { |piece| piece.x == file * 80 && piece.y == @y }
+    end
+  
+    true
   end
-
+  
 
   def is_checked?(rank = @x / 80, file = @y / 80)
   
@@ -149,7 +158,7 @@ class Piece
     return @is_pinned
   end  
   
-  def generate_bot_moves(piece)
+  private def generate_bot_moves(piece)
     piece.bot = true
     piece.generate_attack_moves
     piece.bot = false
