@@ -252,17 +252,20 @@ class Board
   
   def is_check
     king = @pieces.find { |p| p.type == "King" && p.color != @clicked_piece.color }
+    king.generate_moves
     if king&.is_checked?()
       @no_legal_moves = true
       blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first)
       @pieces.each do |loop_piece|
-        next if loop_piece.color == king.color || loop_piece.type == "King"
+        next if loop_piece.color != king.color || loop_piece.type == "King"
         loop_piece.generate_moves
-        if loop_piece.moves.include?(blocking_squares)
-          @no_legal_moves = false
+        loop_piece.moves.each do |move|
+          if blocking_squares.include?(move)
+            @no_legal_moves = false
+          end
         end
       end
-      if @no_legal_moves
+      if @no_legal_moves && king.moves.empty?
         checkmate_ui
       else
         @sounds.move_check.play
@@ -513,6 +516,7 @@ class Board
     
     # Only calculate for non-knight pieces
     if attacking_piece.type == "Knight"
+      puts "OK"
       blocking_squares.add([attacking_piece.rank, attacking_piece.file])
     else
       # Iterate to add each blocking square until reaching the attacking piece
