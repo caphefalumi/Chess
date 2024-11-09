@@ -5,7 +5,7 @@ require 'set'
 
 class Piece
   attr_reader :piece, :position, :render, :blocking_squares
-  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :attacking_pieces, :is_pinned, :is_moved, :is_checked
+  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :promoted, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
   def initialize(x, y, piece, piece_image, board)
     @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
@@ -14,6 +14,7 @@ class Piece
     @pre_x = Array.new()
     @pre_y = Array.new()
     @capture_piece = Array.new()
+    @promoted = false
     @bot = false
     @is_moved = false
     @is_pinned = false
@@ -230,7 +231,7 @@ class Piece
   end
 
   def promotion(choice)
-    piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Night" => PieceEval::KNIGHT }
+    piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Night" => PieceEval::KNIGHT, "Pawn" => PieceEval::PAWN }
     new_piece_type = piece_map[choice] || PieceEval::QUEEN
     promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK))
   end
@@ -238,6 +239,7 @@ class Piece
   private def promote(new_piece_type)
     @piece = new_piece_type
     @piece_image = piece_image(@piece)
+    @promoted = true
     render_piece
     puts "#{color} promoted to #{type}!"
   end

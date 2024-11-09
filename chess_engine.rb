@@ -42,38 +42,8 @@ class Engine
   end
   
 
-  def minimax
-    # Store all possible moves and their evaluated scores
-    best_score = -Float::INFINITY
-    best_piece = nil
-    best_move = nil
+  def test
     
-    # Get all pieces of current color
-    current_pieces = @board.pieces.select { |p| p.color == @board.current_turn}
-    
-    # Evaluate each possible move
-    current_pieces.each do |piece|
-      piece.generate_moves
-      
-      piece.moves.each do |move|
-        # Make temporary move
-        temp_state = make_temp_move(piece, move)
-        
-        # Evaluate position after move
-        score = minimax_eval(@max_depth - 1, false)
-        
-        # Undo temporary move
-        undo_temp_move(piece, temp_state)
-        
-        # Update best move if better score found
-        if score > best_score
-          best_score = score
-          best_piece = piece
-          best_move = move
-        end
-      end
-    end
-
     # Execute the best move found
     Thread.new do
       sleep(0.1)
@@ -81,7 +51,7 @@ class Engine
         @board.clear_previous_selection(only_moves: false)
         @board.clicked_piece = best_piece
         @board.highlight_selected_piece(best_piece.x, best_piece.y)
-        @board.make_move(best_move[0], best_move[1])
+        @board.make_move(best_move[0], best_move[1], true)
       end
     end
   end
@@ -99,7 +69,7 @@ class Engine
       max_eval = -Float::INFINITY
       
       moves.each do |move|
-        @board.make_move(move[0], move[1], move[2])
+        @board.make_move(move[0], move[1], move[2], false)
         current_eval = minimax(depth - 1, false, maximizing_color)[1]
         @board.unmake_move()
         if current_eval > max_eval

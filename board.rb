@@ -136,7 +136,7 @@ class Board
         if !@is_piece_clicked
           select_piece(rank, file)
         else
-          make_move(rank, file)
+          make_move(@clicked_piece, rank, file)
         end
       end
     end
@@ -220,7 +220,7 @@ class Board
 
   
   # Attempts to move the piece or capture an opponent piece
-  def make_move(piece = @clicked_piece, rank, file)
+  def make_move(piece, rank, file, render = true)
     return if not piece  
   
     target_move = [rank, file]
@@ -234,13 +234,13 @@ class Board
     end
   
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
-    move_piece(piece, rank, file)
+    move_piece(piece, rank, file, render)
 
     if target_piece&.color == piece.color
       handle_illegal_move
 
     elsif target_piece
-      capture_piece(piece, target_piece)
+      capture_piece(piece, target_piece, render)
     end
     @move_history_past << piece
     is_check
@@ -277,17 +277,9 @@ class Board
     end
   end
 
-  def move_piece(piece, rank, file)
+  def move_piece(piece, rank, file, render)
     piece.pre_x << piece.x
     piece.pre_y << piece.y
-    @target_square = Square.new(
-      x: rank * 80,
-      y: file * 80,
-      z: ZOrder::OVERLAP,
-      size: 80,
-      color: "#B58B37"
-    )
-    @target_square.color.opacity = 0.8
     castle_flag = false
     capture_flag = false
     promotion_flag = false
@@ -295,7 +287,18 @@ class Board
     start_x = piece.x
     start_y = piece.y
 
-    render_at_new_pos(rank, file)
+    if render 
+      @target_square = Square.new(
+        x: rank * 80,
+        y: file * 80,
+        z: ZOrder::OVERLAP,
+        size: 80,
+        color: "#B58B37"
+      )
+      @target_square.color.opacity = 0.8
+
+      render_at_new_pos(rank, file)
+    end
 
     if piece.type == "Pawn" && ((start_y + 160 == piece.y && piece.color == "Black") || 
       (start_y - 160 == piece.y && piece.color == "White"))
@@ -328,8 +331,7 @@ class Board
     end
   end
   
-  def unmake_move
-
+  def unmake_move(render = true)
     # Return if there are no past moves
     return if @move_history_past.empty?
   
@@ -337,18 +339,72 @@ class Board
     piece_to_undo = @move_history_past.pop
     # If there's no piece to undo, return early
     return if piece_to_undo.nil?
-  
+    
+    # Store the current position before undoing
+    current_x = piece_to_undo.x
+    current_y = piece_to_undo.y
+    
     # Restore the piece's previous position
-    piece_to_undo.render.remove
+    piece_to_undo.render.remove if render
     piece_to_undo.x = piece_to_undo.pre_x.pop
     piece_to_undo.y = piece_to_undo.pre_y.pop
-    piece_to_undo.render_piece
+    piece_to_undo.render_piece if render
   
-    # # Restore captured piece if any
-    if piece_to_undo.capture_piece.last
-      captured_piece = piece_to_undo.capture_piece.pop
-      captured_piece.render_piece
-      @pieces.add(captured_piece)
+    # Handle castling
+    if piece_to_undo.type == "King" && (current_x - piece_to_undo.x).abs == 160
+      # Determine which rook to move back
+      rook_old_x = current_x > piece_to_undo.x ? 5 * 80 : 3 * 80
+      rook_new_x = current_x > piece_to_undo.x ? 7 * 80 : 0
+      rook = @pieces.find { |p| 
+        p.type == "Rook" && 
+        p.color == piece_to_undo.color && 
+        p.x == rook_old_x && 
+        p.y == piece_to_undo.y
+      }
+      
+      if rook
+        rook.render.remove if render
+        rook.x = rook_new_x
+        rook.render_piece if render
+        rook.is_moved = false
+      end
+      piece_to_undo.is_moved = false
+      piece_to_undo.can_castle = false
+    end
+  
+    # Handle promotion
+    if piece_to_undo.promoted && (piece_to_undo.file == 7 || piece_to_undo.file == 0)
+      piece_to_undo.type = "Pawn"
+      piece_to_undo.promotion("Pawn")
+      piece_to_undo.promoted = false
+      piece_to_undo.render.remove if render
+      piece_to_undo.render_piece if render
+    end
+  
+    # Handle en passant
+    if piece_to_undo.type == "Pawn" && piece_to_undo.capture_piece.last
+      captured_piece = piece_to_undo.capture_piece.last
+      # Check if it was an en passant capture
+      if (captured_piece.y != current_y)
+        # Restore captured pawn to its original position
+        captured_piece.y = current_y
+        piece_to_undo.capture_piece.pop
+        captured_piece.render_piece if render
+        @pieces.add(captured_piece)
+        captured_piece.can_en_passant = true
+      else
+        # Regular capture
+        piece_to_undo.capture_piece.pop
+        captured_piece.render_piece if render
+        @pieces.add(captured_piece)
+      end
+    else
+      # Restore captured piece if any (regular capture)
+      if piece_to_undo.capture_piece.last
+        captured_piece = piece_to_undo.capture_piece.pop
+        captured_piece.render_piece if render
+        @pieces.add(captured_piece)
+      end
     end
   
     # Reset en passant flag if necessary
@@ -364,47 +420,13 @@ class Board
     # Switch turn back to the previous player
     @current_turn = @current_turn == "White" ? "Black" : "White"
     @number_of_moves -= 1
-  end
   
 
-  # TODO: NEED TO BE FIXED
-  def remake_move
-    return if @pieces.empty? || @move_history_future.nil?
-    
-    # Store the piece that was last moved
-    piece_to_undo = @move_history_future.last
-    
-    # Revert the piece position to its previous position
-    piece_to_undo.render.remove
-    piece_to_undo.x = piece_to_undo.pre_x
-    piece_to_undo.y = piece_to_undo.pre_y
-    piece_to_undo.render_piece
-    
-    # If there was a capture, restore the captured piece
-    if piece_to_undo.capture_piece
-      captured_piece = piece_to_undo.capture_piece
-      captured_piece.render_piece
-      @pieces.add(captured_piece)
-      piece_to_undo.capture_piece = nil
-    end
-    
-    # Reset en passant flag if it was set
-    piece_to_undo.can_en_passant = false if piece_to_undo.type == "Pawn"
-    
-    # Clear any highlighted squares or moves
-    clear_previous_selection(only_moves: false)
-    
-    # Reset all states
-    reset_state_after_move
-    
-    # Reset the last move
-    @move_history_past << @move_history_future.last
-    @move_history_future.delete(@move_history_future.last)
   end
 
   # Captures the opponent's piece
-  def capture_piece(piece, target_piece)
-    target_piece.render.remove
+  def capture_piece(piece, target_piece, render = true)
+    target_piece.render.remove if render
     @pieces.delete(target_piece)
     @sounds.capture.play
     piece.capture_piece << target_piece
