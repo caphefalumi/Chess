@@ -470,7 +470,11 @@ class Board
         next if piece.color != king.color
         piece.generate_moves
         piece.moves -= illegal_moves(blocking_squares, piece) 
+        if piece.moves.any?
+          @no_legal_moves = false
+        end
       end
+      puts king.moves.inspect
       if @no_legal_moves && king.moves.empty?
         checkmate_ui
       end
