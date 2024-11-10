@@ -63,18 +63,22 @@ class Engine
     if depth == 0 || @board.game_over
       return nil, evaluate(maximizing_color)
     end
-    moves = @board.get_moves
-    best_move = moves.sample
+    legal_moves = @board.get_moves.select { |move| !move[:to].empty?}
+
+    best_move = legal_moves[:to].sample[0]
     if maximizing_player
       max_eval = -Float::INFINITY
       
-      moves.each do |move|
-        @board.make_move(move[0], move[1], move[2], false)
-        current_eval = minimax(depth - 1, false, maximizing_color)[1]
-        @board.unmake_move()
-        if current_eval > max_eval
-          max_eval = current_eval
-          best_move = move
+      legal_moves.each do |moves|
+        piece_to_move = @board.pieces.find { |p| p.name = moves[:name] && p.position == moves[:from] }
+        moves[:to].each do |move|
+          @board.make_move(piece_to_move, moves[:from], move, false)
+          current_eval = minimax(depth - 1, false, maximizing_color)[1]
+          @board.unmake_move()
+          if current_eval > max_eval
+            max_eval = current_eval
+            best_move = move
+          end
         end
       end
       return max_eval

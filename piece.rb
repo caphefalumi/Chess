@@ -95,14 +95,13 @@ class Piece
   def king_moves
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx,dy|
-      add_move_if_legal(@x / 80 + dx, @y / 80 + dy) if !is_checked?(@x / 80 + dx, @y / 80 + dy)
+      add_move_if_legal(rank + dx, file + dy) if !is_checked?(rank + dx, file + dy)
     end
-
     if !is_moved
       king_side_rook = find_castling_rook(7 * 80)
       queen_side_rook = find_castling_rook(0)
-      add_move_if_legal(6, @y / 80) if king_side_rook && no_pieces_between(king_side_rook)
-      add_move_if_legal(2, @y / 80) if queen_side_rook && no_pieces_between(queen_side_rook)
+      add_move_if_legal(6, file) if king_side_rook && no_pieces_between(king_side_rook)
+      add_move_if_legal(2, file) if queen_side_rook && no_pieces_between(queen_side_rook)
     end
   end
 
@@ -134,9 +133,9 @@ class Piece
       next if piece.color == color || piece.type == "King" # Only consider opponent pieces
       generate_bot_moves(piece)
       if piece.moves.include?(king_position)
-        break if @attacking_pieces.size > 2
         @attacking_pieces.add(piece)
         @is_checked = true
+        break if @attacking_pieces.size == 2
       end
     end
     return @is_checked
@@ -145,7 +144,7 @@ class Piece
 
   def is_pinned?
     return false if type == "King"
-    king = @board.pieces.find { |p| p.type == "King" && p.color == color && p.is_checked == false}
+    king = @board.pieces.find { |p| p.type == "King" && p.color == color }
     if king 
       @board.pieces.delete(self)
       if king.is_checked?()
@@ -249,7 +248,7 @@ class Piece
     
     target_piece = @board.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80}
     # Empty square or perform a xray attack  
-    if target_piece.nil? || (target_piece.type == "King" && target_piece.color != color)
+    if target_piece.nil? || (target_piece.type == "King" && target_piece.color != color && @bot)
       @moves.add([new_x, new_y])
       true
     # Capture a piece
