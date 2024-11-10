@@ -19,7 +19,7 @@ on :key_down do |event|
   elsif event.key == 'r'
     board.reset_board
   elsif event.key == 'd'
-    board.get_moves
+    moves = board.get_moves()
     moves.each do |move|
       puts move[:to].inspect
     end

@@ -144,8 +144,11 @@ class Board
   
   def turn
     @last_move = @clicked_piece
-    @current_turn = @current_turn == "White" ? "Black" : "White"
-    @engine.minimax()
+    # @current_turn = @current_turn == "White" ? "Black" : "White"
+    # if @current_turn == "Black"
+    #   @engine.minimax
+
+    # end
   end
 
   def area_clicked(leftX, topY, rightX, bottomY)
@@ -195,7 +198,7 @@ class Board
     end
   end  
 
-  def get_moves
+  def get_moves()
     available_moves = []
     king = @pieces.find { |p| p.type == "King" && p.color == @current_turn }
     pieces = @pieces.dup
