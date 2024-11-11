@@ -56,7 +56,7 @@ end
 
 class Board
   attr_reader :pieces, :last_move, :checked, :game_over
-  attr_accessor :clicked_piece, :current_turn
+  attr_accessor :clicked_piece, :current_turn, :render
   def initialize
     @sounds = Sounds.new()
     @pieces = Set.new()
@@ -70,6 +70,7 @@ class Board
     @checked = false
     @promotion = false
     @is_piece_clicked = false
+    @render = true
     @current_turn = "White"
     @board = initialize_board
     @engine = Engine.new(self)
@@ -144,11 +145,10 @@ class Board
   
   def turn
     @last_move = @clicked_piece
-    # @current_turn = @current_turn == "White" ? "Black" : "White"
-    # if @current_turn == "Black"
-    #   @engine.minimax
-
-    # end
+    @current_turn = @current_turn == "White" ? "Black" : "White"
+    if @current_turn == "Black"
+      @engine.random
+    end
   end
 
   def area_clicked(leftX, topY, rightX, bottomY)
@@ -168,7 +168,7 @@ class Board
         handle_pin(@clicked_piece, king)
       end
 
-      highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
+      highlight_selected_piece(rank, file)
       draw_possible_moves(@clicked_piece.moves)
       @is_piece_clicked = true
     end
@@ -217,7 +217,7 @@ class Board
       end
 
       # Add valid moves for this piece to the list, including its position
-      available_moves << { piece: piece.name, from: [piece.rank, piece.file], to: piece.moves }
+      available_moves << { piece: piece.itself, from: [piece.rank, piece.file], to: piece.moves } if piece.moves.any?
     end
 
     return available_moves
@@ -225,13 +225,12 @@ class Board
 
   
   # Attempts to move the piece or capture an opponent piece
-  def make_move(piece, rank, file, render = true)
-    return if not piece  
-  
+  def make_move(piece, rank, file)
+    puts @current_turn
+    # return if not piece  
     target_move = [rank, file]
-  
-    # Check if the target move is in the list of legal moves
-    if not piece.moves.include?(target_move)
+    # # Check if the target move is in the list of legal moves
+    if not piece.moves.include?(target_move) && @render
       clear_previous_selection(only_moves: false)
       handle_illegal_move
       reset_state_after_move
@@ -239,13 +238,13 @@ class Board
     end
   
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
-    move_piece(piece, rank, file, render)
+    move_piece(piece, rank, file)
 
     if target_piece&.color == piece.color
       handle_illegal_move
 
     elsif target_piece
-      capture_piece(piece, target_piece, render)
+      capture_piece(piece, target_piece)
     end
     @move_history_past << piece
     is_check
@@ -256,10 +255,10 @@ class Board
   end
   
   def is_check
-    king = @pieces.find { |p| p.type == "King" && p.color != @clicked_piece.color }
+    king = @pieces.find { |p| p.type == "King" && p.color != @clicked_piece&.color }
     # king.generate_moves
     if king&.is_checked?()
-      @sounds.move_check.play
+      @sounds.move_check.play if @render
       @checked = true
       @no_legal_moves = true
       blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first)
@@ -283,7 +282,7 @@ class Board
     end
   end
 
-  def move_piece(piece, rank, file, render)
+  def move_piece(piece, rank, file)
     piece.pre_x << piece.x
     piece.pre_y << piece.y
     castle_flag = false
@@ -293,7 +292,7 @@ class Board
     start_x = piece.x
     start_y = piece.y
 
-    if render 
+    if @render 
       @target_square = Square.new(
         x: rank * 80,
         y: file * 80,
@@ -303,8 +302,8 @@ class Board
       )
       @target_square.color.opacity = 0.8
 
-      render_at_new_pos(rank, file)
     end
+    render_at_new_pos(piece, rank, file)
 
     if piece.type == "Pawn" && ((start_y + 160 == piece.y && piece.color == "Black") || 
       (start_y - 160 == piece.y && piece.color == "White"))
@@ -332,12 +331,12 @@ class Board
       end
     end
 
-    if !castle_flag && !capture_flag && !promotion_flag && !en_passant_flag
+    if !castle_flag && !capture_flag && !promotion_flag && !en_passant_flag && @render
       @sounds.move_self.play 
     end
   end
   
-  def unmake_move(render = true)
+  def unmake_move()
     # Return if there are no past moves
     return if @move_history_past.empty?
   
@@ -351,10 +350,10 @@ class Board
     current_y = piece_to_undo.y
     
     # Restore the piece's previous position
-    piece_to_undo.render.remove if render
+    piece_to_undo.render.remove if @render
     piece_to_undo.x = piece_to_undo.pre_x.pop
     piece_to_undo.y = piece_to_undo.pre_y.pop
-    piece_to_undo.render_piece if render
+    piece_to_undo.render_piece if @render
   
     # Handle castling
     if piece_to_undo.type == "King" && (current_x - piece_to_undo.x).abs == 160
@@ -369,9 +368,9 @@ class Board
       }
       
       if rook
-        rook.render.remove if render
+        rook.render.remove if @render
         rook.x = rook_new_x
-        rook.render_piece if render
+        rook.render_piece if @render
         rook.is_moved = false
       end
       piece_to_undo.is_moved = false
@@ -383,8 +382,8 @@ class Board
       piece_to_undo.type = "Pawn"
       piece_to_undo.promotion("Pawn")
       piece_to_undo.promoted = false
-      piece_to_undo.render.remove if render
-      piece_to_undo.render_piece if render
+      piece_to_undo.render.remove if @render
+      piece_to_undo.render_piece if @render
     end
   
     # Handle en passant
@@ -395,20 +394,20 @@ class Board
         # Restore captured pawn to its original position
         captured_piece.y = current_y
         piece_to_undo.capture_piece.pop
-        captured_piece.render_piece if render
+        captured_piece.render_piece if @render
         @pieces.add(captured_piece)
         captured_piece.can_en_passant = true
       else
         # Regular capture
         piece_to_undo.capture_piece.pop
-        captured_piece.render_piece if render
+        captured_piece.render_piece if @render
         @pieces.add(captured_piece)
       end
     else
       # Restore captured piece if any (regular capture)
       if piece_to_undo.capture_piece.last
         captured_piece = piece_to_undo.capture_piece.pop
-        captured_piece.render_piece if render
+        captured_piece.render_piece if @render
         @pieces.add(captured_piece)
       end
     end
@@ -431,10 +430,10 @@ class Board
   end
 
   # Captures the opponent's piece
-  def capture_piece(piece, target_piece, render = true)
-    target_piece.render.remove if render
+  def capture_piece(piece, target_piece)
+    target_piece.render.remove if @render
     @pieces.delete(target_piece)
-    @sounds.capture.play
+    @sounds.capture.play if @render
     piece.capture_piece << target_piece
   end
 
@@ -488,11 +487,9 @@ class Board
     rook_new_x = rank == 6 ? 5 * 80 : 3 * 80
     if rook
       # Move rook to its new position
-      rook.render.remove
-      rook.x = rook_new_x
-      rook.render_piece
+      render_at_new_pos(rook, rook_new_x, rook.file)
       rook.is_moved = true
-      @sounds.castle.play
+      @sounds.castle.play if @render
     end
   end
 
@@ -629,12 +626,12 @@ class Board
   end
 
   # Move the clicked piece to the new coordinates
-  def render_at_new_pos(rank, file)
-    @clicked_piece.is_moved = true
-    @clicked_piece.render.remove  
-    @clicked_piece.x = rank * 80 
-    @clicked_piece.y = file * 80
-    @clicked_piece.render_piece
+  def render_at_new_pos(piece, rank, file)
+    piece.is_moved = true
+    piece.render.remove if @render
+    piece.x = rank * 80 
+    piece.y = file * 80
+    piece.render_piece if @render
   end
 
   # Highlight the illegal move visually
@@ -657,12 +654,12 @@ class Board
   end
 
   # Highlights the selected piece on the board
-  def highlight_selected_piece(x, y)
+  def highlight_selected_piece(rank, file)
     clear_previous_selection(only_moves: false)
-
+    puts "ok"
     @clicked_square = Square.new(
-      x: x,
-      y: y,
+      x: rank * 80,
+      y: file * 80,
       z: ZOrder::OVERLAP,
       size: 80,
       color: "#B58B37"
@@ -671,8 +668,10 @@ class Board
   end
   
   def handle_illegal_move
-    @sounds.illegal.play
-    highlight_illegal_move(@clicked_piece)
+    if @render
+      @sounds.illegal.play
+      highlight_illegal_move(@clicked_piece)
+    end
     @illegal_state = true
   end
 
