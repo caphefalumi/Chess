@@ -10,7 +10,7 @@ class Piece
   def initialize(x, y, piece, piece_image, board)
     @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
     @attacking_pieces = Set.new()
-    @moves = Set.new()
+    @moves = Array.new()
     @pre_x = Array.new()
     @pre_y = Array.new()
     @capture_piece = Array.new()
@@ -126,16 +126,26 @@ class Piece
   
 
   def is_checked?(rank = @x / 80, file = @y / 80)
-  
     king_position = [rank, file]
     @is_checked = false
+  
     @board.pieces.each do |piece|
-      next if piece.color == color || piece.type == "King" # Only consider opponent pieces
+      next if piece.color == color # Only consider opponent pieces
+  
+      # Special case for opponent King: check adjacent squares
+      if piece.type == "King"
+        if (piece.rank - rank).abs <= 1 && (piece.file - file).abs <= 1
+          @is_checked = true
+          break
+        end
+        next
+      end
+  
       generate_bot_moves(piece)
       if piece.moves.include?(king_position)
         @attacking_pieces.add(piece)
         @is_checked = true
-        break if @attacking_pieces.size == 2
+        break if @attacking_pieces.size == 2 # Optimization: Stop if two attackers are found
       end
     end
     return @is_checked
@@ -194,11 +204,11 @@ class Piece
     rank, file = @x / 80, @y / 80
 
     # Single step
-    add_move_if_legal(rank, file + direction) if empty_square?(rank, file + direction) && !@bot
+    add_move_if_legal(rank, file + direction) if empty_square?(rank, file + direction)
 
     # Double step from starting rank
     if (color == "White" && file == 6) || (color == "Black" && file == 1)
-      add_move_if_legal(rank, file + 2 * direction) if empty_square?(rank, file + direction) && empty_square?(rank, file + 2 * direction) && !@bot
+      add_move_if_legal(rank, file + 2 * direction) if empty_square?(rank, file + direction) && empty_square?(rank, file + 2 * direction)
     end
 
     # Capture moves
@@ -209,8 +219,8 @@ class Piece
     add_en_passant_moves(rank, file, direction)
   end
 
-  private def empty_square?(x, y)
-    !@board.pieces.find { |p| p.x == x * 80 && p.y == y * 80 }
+  private def empty_square?(rank, file)
+    return !@board.pieces.any? { |p| p.rank == rank && p.file == file }
   end
 
   private def capture_pawn(target_rank, target_file)
@@ -249,15 +259,18 @@ class Piece
     target_piece = @board.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80}
     # Empty square or perform a xray attack  
     if target_piece.nil? || (target_piece.type == "King" && target_piece.color != color && @bot)
-      @moves.add([new_x, new_y])
+      @moves.push([new_x, new_y])
       true
     # Capture a piece
     elsif target_piece.color != color
-      @moves.add([new_x, new_y])
+      @moves.push([new_x, new_y])
       false
     # Protect a friendly piece
     elsif target_piece.color == color && @bot
-      @moves.add([new_x, new_y])
+      if type == "King"
+        puts "asdsa"
+      end
+      @moves.push([new_x, new_y])
       false
     end
     

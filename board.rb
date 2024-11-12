@@ -56,20 +56,19 @@ end
 
 class Board
   attr_reader :pieces, :last_move, :checked, :game_over
-  attr_accessor :clicked_piece, :current_turn, :render
+  attr_accessor :clicked_piece, :current_turn, :render, :player_playing, :player_move_history, :bot_move_history
   def initialize
     @sounds = Sounds.new()
     @pieces = Set.new()
     @moves = Set.new()
-    @valid_moves = Set.new()
-    @move_history_past = Array.new()
-    @move_history_future = Array.new()
-    @number_of_moves = -1
+    @player_move_history = Array.new()
+    @bot_move_history = Array.new()
     @clicked_piece = nil
     @last_move = nil
     @checked = false
     @promotion = false
     @is_piece_clicked = false
+    @player_playing = true
     @render = true
     @current_turn = "White"
     @board = initialize_board
@@ -91,9 +90,9 @@ class Board
   end
 
   def draw_board
-    (0..8).each do |rank|  # Count down from 7 to 0
-      (0...8).each do |file|       # Still count up from 0 to 7 for files
-        is_light_square = (rank + file) % 2 != 0
+    (0..8).each do |rank|
+      (0...8).each do |file|
+        is_light_square = (rank + file) & 1 != 0
         square_color = is_light_square ? "#6e4e36" : "#b99b75"
   
         # Draw square
@@ -144,10 +143,11 @@ class Board
   end
   
   def turn
+
     @last_move = @clicked_piece
     @current_turn = @current_turn == "White" ? "Black" : "White"
-    if @current_turn == "Black"
-      @engine.random
+    if @player_playing && @current_turn == "Black"
+      # @engine.minimax
     end
   end
 
@@ -157,7 +157,7 @@ class Board
 
   def select_piece(rank, file)
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
-
+    @player_playing = true
     if @clicked_piece
       king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color }
       @clicked_piece.bot = false
@@ -215,23 +215,21 @@ class Board
       elsif piece.type != "King"
         handle_pin(piece, king)
       end
-
       # Add valid moves for this piece to the list, including its position
-      available_moves << { piece: piece.itself, from: [piece.rank, piece.file], to: piece.moves } if piece.moves.any?
+      available_moves << { piece: piece, from: [piece.rank, piece.file], to: piece.moves } if piece.moves.any?
     end
-
+    puts available_moves.inspect
     return available_moves
   end
 
   
   # Attempts to move the piece or capture an opponent piece
   def make_move(piece, rank, file)
-    puts @current_turn
     # return if not piece  
     target_move = [rank, file]
     # # Check if the target move is in the list of legal moves
-    if not piece.moves.include?(target_move) && @render
-      clear_previous_selection(only_moves: false)
+    if !piece.moves.include?(target_move) && @player_playing
+      puts piece.moves.inspect
       handle_illegal_move
       reset_state_after_move
       return
@@ -246,11 +244,15 @@ class Board
     elsif target_piece
       capture_piece(piece, target_piece)
     end
-    @move_history_past << piece
-    is_check
-    
-    turn if !@promotion
 
+    if @player_playing
+      @player_move_history << piece 
+    else 
+      @bot_move_history << piece
+    end
+
+    is_check
+    turn if !@promotion
     reset_state_after_move
   end
   
@@ -338,10 +340,14 @@ class Board
   
   def unmake_move()
     # Return if there are no past moves
-    return if @move_history_past.empty?
+    return if @player_move_history.empty?
   
     # Get the last moved piece from the history
-    piece_to_undo = @move_history_past.pop
+    if @player_playing
+      piece_to_undo = @player_move_history.pop
+    else
+      piece_to_undo = @bot_move_history.pop
+    end
     # If there's no piece to undo, return early
     return if piece_to_undo.nil?
     
@@ -415,16 +421,12 @@ class Board
     # Reset en passant flag if necessary
     piece_to_undo.can_en_passant = false if piece_to_undo.type == "Pawn"
   
-    # Move the undone move to the future history for redo
-    @move_history_future << piece_to_undo
-  
     # Clear highlights and reset state
     clear_previous_selection(only_moves: false)
     reset_state_after_move
   
     # Switch turn back to the previous player
     @current_turn = @current_turn == "White" ? "Black" : "White"
-    @number_of_moves -= 1
   
 
   end
@@ -656,7 +658,6 @@ class Board
   # Highlights the selected piece on the board
   def highlight_selected_piece(rank, file)
     clear_previous_selection(only_moves: false)
-    puts "ok"
     @clicked_square = Square.new(
       x: rank * 80,
       y: file * 80,
@@ -702,7 +703,6 @@ class Board
     @last_move = nil
     @current_turn = "White"
     @checked = false
-    @valid_moves = nil
     @clicked_piece = nil
     @is_piece_clicked = false
     @game_over = false
