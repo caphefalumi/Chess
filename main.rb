@@ -21,7 +21,7 @@ on :key_down do |event|
   elsif event.key == 'd'
     moves = board.get_moves()
     moves.each do |move|
-      puts move[:to].inspect
+      puts "#{move[:piece].name} #{move[:to].inspect}"
     end
   elsif event.key == 'p'
     close

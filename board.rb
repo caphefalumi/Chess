@@ -218,7 +218,6 @@ class Board
       # Add valid moves for this piece to the list, including its position
       available_moves << { piece: piece, from: [piece.rank, piece.file], to: piece.moves } if piece.moves.any?
     end
-    puts available_moves.inspect
     return available_moves
   end
 
@@ -228,8 +227,7 @@ class Board
     # return if not piece  
     target_move = [rank, file]
     # # Check if the target move is in the list of legal moves
-    if !piece.moves.include?(target_move) && @player_playing
-      puts piece.moves.inspect
+    if !piece.moves.include?(target_move)
       handle_illegal_move
       reset_state_after_move
       return
@@ -238,10 +236,7 @@ class Board
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     move_piece(piece, rank, file)
 
-    if target_piece&.color == piece.color
-      handle_illegal_move
-
-    elsif target_piece
+    if target_piece
       capture_piece(piece, target_piece)
     end
 
@@ -338,7 +333,7 @@ class Board
     end
   end
   
-  def unmake_move()
+  def unmake_move
     # Return if there are no past moves
     return if @player_move_history.empty?
   
@@ -384,12 +379,11 @@ class Board
     end
   
     # Handle promotion
-    if piece_to_undo.promoted && (piece_to_undo.file == 7 || piece_to_undo.file == 0)
-      piece_to_undo.type = "Pawn"
+    if piece_to_undo.promoted && (piece_to_undo.file == 6 || piece_to_undo.file == 1)
+      puts "OK"
+      piece_to_undo.render.remove if @render
       piece_to_undo.promotion("Pawn")
       piece_to_undo.promoted = false
-      piece_to_undo.render.remove if @render
-      piece_to_undo.render_piece if @render
     end
   
     # Handle en passant

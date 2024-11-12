@@ -4,6 +4,8 @@ class Engine
   def initialize(board)
     @board = board
     @max_depth = 2
+    @node_travel = 0
+    @move_travel = 0
     @best_move = nil
   end
 
@@ -31,37 +33,43 @@ class Engine
     if depth == 0 || @board.game_over
       return evaluate(maximizing_player)
     end
+    @node_travel +=1
 
     if maximizing_player
-      max_eval = -Float::INFINITY
+      max_score = -Float::INFINITY
 
       legal_moves.each do |move_data|
 
         move_data[:to].each do |target_pos|
+          @move_travel += 1
           # Make move
           @board.make_move(move_data[:piece], target_pos[0], target_pos[1])
           next_moves = @board.get_moves
           # Recursive evaluation
           score = minimax_eval(next_moves, depth - 1, false , alpha, beta)
 
-          if score > max_eval
-            max_eval = score
+          if score > max_score
+            max_score = score
             if depth == @max_depth
               @best_move = [move_data[:piece], target_pos]
             end
           end
-          @board.unmake_move
-          # Unmake move
+          
+          if max_score > alpha
+            alpha = max_score
+          end
 
-          alpha = [alpha, score].max
-          break if beta <= alpha # Alpha-beta pruning
+          if max_score >= beta
+            @board.unmake_move
+            break # Alpha-beta pruning
+          end
+          @board.unmake_move
         end
       end
-
-      return max_eval
+      return max_score
 
     else
-      min_eval = Float::INFINITY
+      min_score = Float::INFINITY
 
       legal_moves.each do |move_data|
 
@@ -72,20 +80,22 @@ class Engine
           # Recursive evaluation
           score = minimax_eval(next_moves, depth - 1, true, alpha, beta)
 
-          if score < min_eval
-            min_eval = score
-            if depth == @max_depth
-              @best_move = [move_data[:piece], target_pos]
-            end
+          if score < min_score
+            min_score = score
           end
           @board.unmake_move
 
-          beta = [beta, score].min
-          break if beta <= alpha # Alpha-beta pruning
+          if min_score < beta
+            beta = min_score
+          end
+
+          if min_score <= alpha
+            break
+          end
         end
       end
 
-      return min_eval
+      return min_score
     end
   end
 
@@ -97,23 +107,17 @@ class Engine
     @board.render = false
     minimax_eval(moves, @max_depth, true)
     @board.render = true
+    puts @best_move
     if @best_move
       piece, target_pos = @best_move
       puts "Best move: #{piece.name} to #{target_pos}"
-      
+      puts "Total nodes search #{@node_travel}"
+      puts "Total moves search #{@move_travel}"
       # Execute the best move
       @board.make_move(piece, target_pos[0], target_pos[1])
     end
   end
 
-  def negamax_tree
-
-  end
-
-  def negamax
-    
-  end
-  
   # Generates a random move for the current player
   def random
     legal_moves = @board.get_moves

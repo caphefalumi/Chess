@@ -4,7 +4,7 @@ require 'set'
 
 
 class Piece
-  attr_reader :piece, :position, :render, :blocking_squares
+  attr_reader :piece, :position, :render, :promoted, :blocking_squares
   attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :promoted, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
   def initialize(x, y, piece, piece_image, board)
@@ -66,10 +66,10 @@ class Piece
   def get_value
     case type
       when "King" then 10000
-      when "Queen" then 930
-      when "Rook" then 480
-      when "Bishop" then 320
-      when "Knight" then 280
+      when "Queen" then 1000
+      when "Rook" then 500
+      when "Bishop" then 350
+      when "Knight" then 300
       when "Pawn" then 100
     end
   end
