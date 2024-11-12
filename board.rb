@@ -55,8 +55,8 @@ end
 
 
 class Board
-  attr_reader :pieces, :last_move, :checked, :game_over
-  attr_accessor :clicked_piece, :current_turn, :render, :player_playing, :player_move_history, :bot_move_history
+  attr_reader :last_move, :checked, :game_over
+  attr_accessor :clicked_piece, :pieces, :current_turn, :render, :player_playing, :player_move_history, :bot_move_history
   def initialize
     @sounds = Sounds.new()
     @pieces = Set.new()
@@ -147,7 +147,7 @@ class Board
     @last_move = @clicked_piece
     @current_turn = @current_turn == "White" ? "Black" : "White"
     if @player_playing && @current_turn == "Black"
-      # @engine.minimax
+      @engine.brute_force
     end
   end
 
@@ -162,6 +162,7 @@ class Board
       king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color }
       @clicked_piece.bot = false
       @clicked_piece.generate_moves
+      puts @clicked_piece.moves.inspect
       if @checked
         handle_check(@clicked_piece, king)
       else
@@ -274,7 +275,7 @@ class Board
         checkmate_ui
       end
     else
-      king&.attacking_pieces.clear
+      king&.attacking_pieces&.clear
       @checked = false
     end
   end

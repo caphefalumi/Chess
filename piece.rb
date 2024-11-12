@@ -143,9 +143,13 @@ class Piece
   
       generate_bot_moves(piece)
       if piece.moves.include?(king_position)
-        @attacking_pieces.add(piece)
-        @is_checked = true
-        break if @attacking_pieces.size == 2 # Optimization: Stop if two attackers are found
+        if piece.type == "Pawn" && piece.rank == king_position[0]
+          @is_checked = false
+        else
+          @attacking_pieces.add(piece)
+          @is_checked = true
+          break if @attacking_pieces.size == 2 # Optimization: Stop if two attackers are found
+        end
       end
     end
     return @is_checked
@@ -164,7 +168,7 @@ class Piece
         @is_pinned = false
       end
     end
-    @board.pieces.add(self)
+    @board.pieces.to_set.add(self)
     return @is_pinned
   end  
   
