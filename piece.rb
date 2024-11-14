@@ -5,16 +5,17 @@ require 'set'
 
 class Piece
   attr_reader :piece, :position, :render, :promoted, :blocking_squares
-  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :captured_pieces, :promoted, :attacking_pieces, :promotion_flag, :is_pinned, :is_moved, :is_checked
+  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_en_passant, :captured_pieces, :promoted, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
-  def initialize(x, y, piece, piece_image, board)
-    @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
+  def initialize(x, y, piece, board)
+    @x, @y, @piece, @board = x, y, piece, board
+    @piece_image = piece_image
     @attacking_pieces = Set.new()
     @moves = Array.new()
     @pre_x = Array.new()
     @pre_y = Array.new()
     @captured_pieces = Array.new()
-    @promoted = Array.new(Array.new(1))
+    @promoted = [0, false]
     @bot = false
     @is_moved = false
     @is_pinned = false
@@ -22,7 +23,22 @@ class Piece
     @can_en_passant = false
   end
 
+  def piece_image()
+    color = @piece & (0b01000 | 0b10000) == 8 ? "w" : "b"
+    type = @piece & 0b00111
+    case type
+    when PieceEval::KING   then "pieces/#{color}k.png"
+    when PieceEval::QUEEN  then "pieces/#{color}q.png"
+    when PieceEval::ROOK   then "pieces/#{color}r.png"
+    when PieceEval::BISHOP then "pieces/#{color}b.png"
+    when PieceEval::KNIGHT then "pieces/#{color}n.png"
+    when PieceEval::PAWN   then "pieces/#{color}p.png"
+    end
+  end
+
   def render_piece
+    puts @piece_image
+    puts
     @render = Image.new(
       @piece_image,
       x: @x,
@@ -170,7 +186,7 @@ class Piece
     end
     @board.pieces.to_set.add(self)
     return @is_pinned
-  end  
+  end
   
   private def generate_bot_moves(piece)
     piece.bot = true
@@ -235,10 +251,11 @@ class Piece
   end
 
   private def add_en_passant_moves(rank, file, direction)
-    if @board.last_move&.type == "Pawn" && @board.last_move.can_en_passant
+    last_move = @board.player_move_history.last
+    if last_move&.type == "Pawn" && last_move&.can_en_passant
       en_passant_positions = [[rank - 1, file], [rank + 1, file]]
       en_passant_positions.each do |target_rank, _|
-        add_move_if_legal(target_rank, file + direction) if @board.last_move.x == target_rank * 80 && @board.last_move.y == @y
+        add_move_if_legal(target_rank, file + direction) if last_move.x == target_rank * 80 && last_move.y == @y
       end
     end
   end
@@ -271,9 +288,6 @@ class Piece
       false
     # Protect a friendly piece
     elsif target_piece.color == color && @bot
-      if type == "King"
-        puts "asdsa"
-      end
       @moves.push([new_x, new_y])
       false
     end

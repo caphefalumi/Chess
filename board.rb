@@ -55,7 +55,7 @@ end
 
 
 class Board
-  attr_reader :last_move, :checked, :game_over
+  attr_reader :checked, :game_over
   attr_accessor :clicked_piece, :pieces, :current_turn, :render, :player_playing, :player_move_history, :bot_move_history
   def initialize
     @sounds = Sounds.new()
@@ -64,7 +64,6 @@ class Board
     @player_move_history = Array.new()
     @bot_move_history = Array.new()
     @clicked_piece = nil
-    @last_move = nil
     @checked = false
     @promotion = false
     @is_piece_clicked = false
@@ -106,10 +105,9 @@ class Board
   
         # Get the piece at the current position
         piece_pos = @board[file][rank]
-        image_file = piece_image(piece_pos)
         # Create and store the piece object
-        if image_file
-          piece = Piece.new(rank * 80, file * 80, piece_pos, image_file, self)
+        if piece_pos != PieceEval::NONE
+          piece = Piece.new(rank * 80, file * 80, piece_pos, self)
           piece.render_piece
           @pieces.add(piece)
         end
@@ -144,7 +142,6 @@ class Board
   
   def turn
 
-    @last_move = @clicked_piece
     @current_turn = @current_turn == "White" ? "Black" : "White"
     if @player_playing && @current_turn == "Black"
       # @engine.random
@@ -298,12 +295,10 @@ class Board
     if piece.type == "Pawn" && ((start_y + 160 == piece.y && piece.color == "Black") || 
       (start_y - 160 == piece.y && piece.color == "White"))
       piece.can_en_passant = true
-    elsif piece.type == "King" && start_x == 4 * 80 && (rank == 6 || rank == 2)
-      piece.can_castle = true
     end
 
     # Castle
-    if piece.type == "King" && (rank == 6 || rank == 2) && piece.can_castle
+    if piece.type == "King" && start_x == 4 * 80 && (rank == 6 || rank == 2)
       castle(rank, file)
       castle_flag = true
     # Promotion
@@ -311,17 +306,17 @@ class Board
       promotion_ui
       piece.promotion_flag = true
     # En passant
-    elsif @last_move && @last_move.color != piece.color && piece.type == "Pawn" && @last_move.type == "Pawn"
+    elsif @player_move_history.last && @player_move_history.last.color != piece.color && piece.type == "Pawn" && @player_move_history.last.type == "Pawn"
       if (start_x + 80 == piece.x || start_x - 80 == piece.x) && 
         ((start_y + 80 == piece.y && piece.color == "Black") || 
         (start_y - 80 == piece.y && piece.color == "White"))
         
-        capture_piece(@clicked_piece, @last_move)
+        capture_piece(@clicked_piece, @player_move_history.last)
         en_passant_flag = true
       end
     end
 
-    if !promotion_flag && !castle_flag&& !en_passant_flag && @render
+    if !promotion_flag && !castle_flag && !en_passant_flag && @render
       @sounds.move_self.play 
     end
   end
@@ -380,8 +375,6 @@ class Board
       @pieces.add(captured_piece)
     end
 
-    # Reset en passant flag if necessary
-    piece_to_undo.can_en_passant = true if piece_to_undo.type == "Pawn"
   
     # Clear highlights and reset state
     clear_previous_selection(only_moves: false)
@@ -398,7 +391,7 @@ class Board
     target_piece.render.remove if @render
     @pieces.delete(target_piece)
     @sounds.capture.play if @render
-    piece.capture_piece << target_piece
+    piece.captured_pieces << target_piece
   end
 
   def promotion_ui()
@@ -460,6 +453,7 @@ class Board
     if piece.type != "King" && king.attacking_pieces.size == 2
       piece.moves.clear
     else
+      puts "AOK"
       update_legal_moves(piece, king)
     end
   end
@@ -476,6 +470,7 @@ class Board
   end
 
   def illegal_moves(blocking_squares, piece)
+    puts blocking_squares.inspect
     moves_to_delete = []
     if piece.type != "King"
       piece.moves.each do |move|
@@ -488,7 +483,6 @@ class Board
   end
 
   def calculate_blocking_squares(king_pos, attacking_piece)
-    return if attacking_piece.nil?
     blocking_squares = Set.new
     
     # Calculate direction vectors dx and dy
@@ -662,7 +656,6 @@ class Board
     @target_square&.remove
     @moves.each(&:remove)
     @moves.clear
-    @last_move = nil
     @current_turn = "White"
     @checked = false
     @clicked_piece = nil
