@@ -147,7 +147,7 @@ class Board
     @last_move = @clicked_piece
     @current_turn = @current_turn == "White" ? "Black" : "White"
     if @player_playing && @current_turn == "Black"
-      @engine.brute_force
+      # @engine.random
     end
   end
 
@@ -162,7 +162,6 @@ class Board
       king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color }
       @clicked_piece.bot = false
       @clicked_piece.generate_moves
-      puts @clicked_piece.moves.inspect
       if @checked
         handle_check(@clicked_piece, king)
       else
@@ -200,16 +199,14 @@ class Board
   end  
 
   def get_moves()
-    available_moves = []
+    available_moves = Array.new()
     king = @pieces.find { |p| p.type == "King" && p.color == @current_turn }
     pieces = @pieces.dup
     # Find all pieces for the current turn and calculate their moves
     pieces.each do |piece|
       next if piece.color != @current_turn # Skip pieces of the other color
-
       # Generate legal moves for this piece
       piece.generate_moves
-
       # For pieces that are pinned, calculate the blocking squares
       if @checked && piece.type != "King"
         handle_check(piece, king) 
@@ -241,11 +238,7 @@ class Board
       capture_piece(piece, target_piece)
     end
 
-    if @player_playing
-      @player_move_history << piece 
-    else 
-      @bot_move_history << piece
-    end
+    @player_move_history << piece 
 
     is_check
     turn if !@promotion
@@ -283,9 +276,8 @@ class Board
   def move_piece(piece, rank, file)
     piece.pre_x << piece.x
     piece.pre_y << piece.y
-    castle_flag = false
-    capture_flag = false
     promotion_flag = false
+    castle_flag = false
     en_passant_flag = false
     start_x = piece.x
     start_y = piece.y
@@ -317,9 +309,9 @@ class Board
     # Promotion
     elsif piece.type == "Pawn" && (file == 7 || file == 0)
       promotion_ui
-      promotion_flag = true
+      piece.promotion_flag = true
     # En passant
-    elsif @last_move && @last_move.color != piece.color && piece.type == "Pawn" && @last_move.type == "Pawn" && @last_move.can_en_passant 
+    elsif @last_move && @last_move.color != piece.color && piece.type == "Pawn" && @last_move.type == "Pawn"
       if (start_x + 80 == piece.x || start_x - 80 == piece.x) && 
         ((start_y + 80 == piece.y && piece.color == "Black") || 
         (start_y - 80 == piece.y && piece.color == "White"))
@@ -329,7 +321,7 @@ class Board
       end
     end
 
-    if !castle_flag && !capture_flag && !promotion_flag && !en_passant_flag && @render
+    if !promotion_flag && !castle_flag&& !en_passant_flag && @render
       @sounds.move_self.play 
     end
   end
@@ -339,17 +331,11 @@ class Board
     return if @player_move_history.empty?
   
     # Get the last moved piece from the history
-    if @player_playing
-      piece_to_undo = @player_move_history.pop
-    else
-      piece_to_undo = @bot_move_history.pop
-    end
+    piece_to_undo = @player_move_history.pop
     # If there's no piece to undo, return early
     return if piece_to_undo.nil?
-    
-    # Store the current position before undoing
+
     current_x = piece_to_undo.x
-    current_y = piece_to_undo.y
     
     # Restore the piece's previous position
     piece_to_undo.render.remove if @render
@@ -380,41 +366,22 @@ class Board
     end
   
     # Handle promotion
-    if piece_to_undo.promoted && (piece_to_undo.file == 6 || piece_to_undo.file == 1)
-      puts "OK"
+    if piece_to_undo.promoted[0] + 1 == @player_move_history.size && piece_to_undo.promoted[1] == true
       piece_to_undo.render.remove if @render
       piece_to_undo.promotion("Pawn")
-      piece_to_undo.promoted = false
+      piece_to_undo.promoted = [@player_move_history.size, false]
     end
+    captured_piece = piece_to_undo.captured_pieces.last
   
-    # Handle en passant
-    if piece_to_undo.type == "Pawn" && piece_to_undo.capture_piece.last
-      captured_piece = piece_to_undo.capture_piece.last
-      # Check if it was an en passant capture
-      if (captured_piece.y != current_y)
-        # Restore captured pawn to its original position
-        captured_piece.y = current_y
-        piece_to_undo.capture_piece.pop
-        captured_piece.render_piece if @render
-        @pieces.add(captured_piece)
-        captured_piece.can_en_passant = true
-      else
-        # Regular capture
-        piece_to_undo.capture_piece.pop
-        captured_piece.render_piece if @render
-        @pieces.add(captured_piece)
-      end
-    else
-      # Restore captured piece if any (regular capture)
-      if piece_to_undo.capture_piece.last
-        captured_piece = piece_to_undo.capture_piece.pop
-        captured_piece.render_piece if @render
-        @pieces.add(captured_piece)
-      end
+    # Restore captured piece if any (regular capture)
+    if captured_piece
+      piece_to_undo.captured_pieces.pop
+      captured_piece.render_piece if @render
+      @pieces.add(captured_piece)
     end
-  
+
     # Reset en passant flag if necessary
-    piece_to_undo.can_en_passant = false if piece_to_undo.type == "Pawn"
+    piece_to_undo.can_en_passant = true if piece_to_undo.type == "Pawn"
   
     # Clear highlights and reset state
     clear_previous_selection(only_moves: false)
@@ -481,11 +448,10 @@ class Board
   def castle(rank, file)
     rook_x = rank == 6 ? 7 * 80 : 0
     rook = @pieces.find { |p| p.type == "Rook" && p.color == @clicked_piece.color && p.x == rook_x && p.is_moved == false}
-    rook_new_x = rank == 6 ? 5 * 80 : 3 * 80
+    rook_new_x = rank == 6 ? 5 : 3
     if rook
       # Move rook to its new position
       render_at_new_pos(rook, rook_new_x, rook.file)
-      rook.is_moved = true
       @sounds.castle.play if @render
     end
   end
@@ -522,6 +488,7 @@ class Board
   end
 
   def calculate_blocking_squares(king_pos, attacking_piece)
+    return if attacking_piece.nil?
     blocking_squares = Set.new
     
     # Calculate direction vectors dx and dy

@@ -5,7 +5,7 @@ require 'set'
 
 class Piece
   attr_reader :piece, :position, :render, :promoted, :blocking_squares
-  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :promoted, :attacking_pieces, :is_pinned, :is_moved, :is_checked
+  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :captured_pieces, :promoted, :attacking_pieces, :promotion_flag, :is_pinned, :is_moved, :is_checked
 
   def initialize(x, y, piece, piece_image, board)
     @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
@@ -13,8 +13,8 @@ class Piece
     @moves = Array.new()
     @pre_x = Array.new()
     @pre_y = Array.new()
-    @capture_piece = Array.new()
-    @promoted = false
+    @captured_pieces = Array.new()
+    @promoted = Array.new(Array.new(1))
     @bot = false
     @is_moved = false
     @is_pinned = false
@@ -53,24 +53,24 @@ class Piece
 
   def type
     case @piece & 0b00111
-      when PieceEval::KING   then "King"
-      when PieceEval::QUEEN  then "Queen"
-      when PieceEval::ROOK   then "Rook"
-      when PieceEval::BISHOP then "Bishop"
-      when PieceEval::KNIGHT then "Knight"
-      when PieceEval::PAWN   then "Pawn"
-      else ""
+    when PieceEval::KING   then "King"
+    when PieceEval::QUEEN  then "Queen"
+    when PieceEval::ROOK   then "Rook"
+    when PieceEval::BISHOP then "Bishop"
+    when PieceEval::KNIGHT then "Knight"
+    when PieceEval::PAWN   then "Pawn"
+    else ""
     end
   end
 
   def get_value
     case type
-      when "King" then 10000
-      when "Queen" then 1000
-      when "Rook" then 500
-      when "Bishop" then 350
-      when "Knight" then 300
-      when "Pawn" then 100
+    when "King" then 10000
+    when "Queen" then 1000
+    when "Rook" then 500
+    when "Bishop" then 350
+    when "Knight" then 300
+    when "Pawn" then 100
     end
   end
 
@@ -97,11 +97,11 @@ class Piece
     directions.each do |dx,dy|
       add_move_if_legal(rank + dx, file + dy) if !is_checked?(rank + dx, file + dy)
     end
-    if !is_moved
+    if !is_moved && !@board.checked
       king_side_rook = find_castling_rook(7 * 80)
       queen_side_rook = find_castling_rook(0)
-      add_move_if_legal(6, file) if king_side_rook && no_pieces_between(king_side_rook)
-      add_move_if_legal(2, file) if queen_side_rook && no_pieces_between(queen_side_rook)
+      add_move_if_legal(6, file) if king_side_rook && no_pieces_between(king_side_rook) && !is_checked?(6, file)
+      add_move_if_legal(2, file) if queen_side_rook && no_pieces_between(queen_side_rook) && !is_checked?(2, file)
     end
   end
 
@@ -252,7 +252,7 @@ class Piece
   private def promote(new_piece_type)
     @piece = new_piece_type
     @piece_image = piece_image(@piece)
-    @promoted = true
+    @promoted = [@board.player_move_history.size, true]
     render_piece
     puts "#{color} promoted to #{type}!"
   end

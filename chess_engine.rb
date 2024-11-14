@@ -23,80 +23,96 @@ class Engine
     return evaluation * perspective
   end
 
-  def brute_force
-    @best_move = nil
-    best_score = -Float::INFINITY
-    move_count = 0
-    
-    @board.player_playing = false
-    @board.render = false
-  
-    legal_moves = @board.get_moves
-    
-    # Debug output for initial legal moves
-    legal_moves.each do |move_data|
-      piece = move_data[:piece]
-      puts "#{piece.color}#{piece.name} at [#{piece.rank}, #{piece.file}] can move to: #{move_data[:to].inspect}"
+  private def minimax_eval(legal_moves, depth, maximizing_player, alpha = -Float::INFINITY, beta = Float::INFINITY)
+    # Base case: check for max depth or game over state
+    if depth == 0 || @board.game_over
+      return evaluate(maximizing_player)
     end
+    @node_travel +=1
 
-    legal_moves.each do |move_data|
-      current_piece = move_data[:piece]
-      
-      move_data[:to].each do |target_pos|
-        # Validate move before attempting
-        next unless valid_move?(current_piece, target_pos)
-        
-        move_count += 1
-        
-        # Debug output for each move being considered
-        puts "Trying #{current_piece.color}#{current_piece.name} from [#{current_piece.rank}, #{current_piece.file}] to [#{target_pos[0]}, #{target_pos[1]}]"
-        
-        @board.make_move(current_piece, target_pos[0], target_pos[1])
-        
-        opponent_moves = @board.get_moves
-        worst_score = Float::INFINITY
-        
-        opponent_moves.each do |opp_move|
-          opp_piece = opp_move[:piece]
+    if maximizing_player
+      max_score = -Float::INFINITY
+
+      legal_moves.each do |move_data|
+
+        move_data[:to].each do |target_pos|
+          @move_travel += 1
+          # Make move
+          @board.make_move(move_data[:piece], target_pos[0], target_pos[1])
+          next_moves = @board.get_moves
+          # Recursive evaluation
+          score = minimax_eval(next_moves, depth - 1, false , alpha, beta)
+
+          if score > max_score
+            max_score = score
+            if depth == @max_depth
+              @best_move = [move_data[:piece], target_pos]
+            end
+          end
           
-          opp_move[:to].each do |opp_target|
-            # Validate opponent move before attempting
-            next unless valid_move?(opp_piece, opp_target)
-            
-            @board.make_move(opp_piece, opp_target[0], opp_target[1])
-            score = evaluate(true)
-            worst_score = [worst_score, score].min
+          if max_score > alpha
+            alpha = max_score
+          end
+
+          if max_score >= beta
             @board.unmake_move
+            break # Alpha-beta pruning
+          end
+          @board.unmake_move
+        end
+      end
+      return max_score
+
+    else
+      min_score = Float::INFINITY
+
+      legal_moves.each do |move_data|
+
+        move_data[:to].each do |target_pos|
+          # Make move
+          @board.make_move(move_data[:piece], target_pos[0], target_pos[1])
+          next_moves = @board.get_moves
+          # Recursive evaluation
+          score = minimax_eval(next_moves, depth - 1, true, alpha, beta)
+
+          if score < min_score
+            min_score = score
+          end
+          @board.unmake_move
+
+          if min_score < beta
+            beta = min_score
+          end
+
+          if min_score <= alpha
+            break
           end
         end
-        
-        @board.unmake_move
-        
-        if worst_score > best_score
-          best_score = worst_score
-          @best_move = [current_piece, target_pos]
-          puts "New best move found: #{current_piece.color}#{current_piece.name} to [#{target_pos[0]}, #{target_pos[1]}]"
-        end
       end
-    end
-  
-    if @best_move
-      @board.player_playing = true
-      @board.render = true
-      
-      piece, target_pos = @best_move
-      
-      # Final validation before executing the move
-      if valid_move?(piece, target_pos)
-        puts "Executing move: #{piece.color}#{piece.name} from [#{piece.rank}, #{piece.file}] to [#{target_pos[0]}, #{target_pos[1]}]"
-        puts "Evaluated #{move_count} possible positions"
-        @board.make_move(piece, target_pos[0], target_pos[1])
-      else
-        puts "ERROR: Final selected move was invalid! Picking random move instead."
-        random
-      end
+
+      return min_score
     end
   end
+
+  # Finds and executes the best move using Minimax
+  def minimax
+    @best_move = nil
+    @board.player_playing = false
+    moves = @board.get_moves
+    @board.render = false
+    minimax_eval(moves, @max_depth, true)
+    @board.render = true
+    puts @best_move
+    if @best_move
+      piece, target_pos = @best_move
+      puts "Best move: #{piece.name} to #{target_pos}"
+      puts "Total nodes search #{@node_travel}"
+      puts "Total moves search #{@move_travel}"
+      # Execute the best move
+      @board.make_move(piece, target_pos[0], target_pos[1])
+    end
+  end
+
 
   def valid_move?(piece, target_pos)
     # Basic bounds checking
@@ -116,12 +132,26 @@ class Engine
     random_piece = legal_moves.sample
     moves = random_piece[:to].to_a.sample
 
-    Thread.new do
-      sleep(0.5)
-      @board.clear_previous_selection(only_moves: false)
-      if moves
-        @board.make_move(random_piece[:piece], moves[0], moves[1])
+    @board.clear_previous_selection(only_moves: false)
+    if moves
+      legal_moves.each do |move|
+        puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
       end
+      puts "Moving #{random_piece[:piece].name}"
+      @board.make_move(random_piece[:piece], moves[0], moves[1])
+    end
+    puts puts puts
+    legal_moves = @board.get_moves
+    legal_moves.each do |move|
+      puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
+    end
+    # @board.unmake_move
+    legal_moves = @board.get_moves
+    puts 
+    puts 
+    puts
+    legal_moves.each do |move|
+      puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
     end
   end
 end
