@@ -4,6 +4,9 @@ class Engine
   def initialize(board)
     @board = board
     @best_move = nil
+    @max_depth = 2
+    @node_travel = 0
+    @move_travel = 0
   end
 
   def evaluate(maximizing_player)
@@ -29,12 +32,12 @@ class Engine
       return evaluate(maximizing_player)
     end
     @node_travel +=1
-
+    break_signal = false
     if maximizing_player
       max_score = -Float::INFINITY
 
       legal_moves.each do |move_data|
-
+        break if break_signal
         move_data[:to].each do |target_pos|
           @move_travel += 1
           # Make move
@@ -56,10 +59,12 @@ class Engine
 
           if max_score >= beta
             @board.unmake_move
+            break_signal = true
             break # Alpha-beta pruning
           end
           @board.unmake_move
         end
+        
       end
       return max_score
 
@@ -67,7 +72,7 @@ class Engine
       min_score = Float::INFINITY
 
       legal_moves.each do |move_data|
-
+        break if break_signal
         move_data[:to].each do |target_pos|
           # Make move
           @board.make_move(move_data[:piece], target_pos[0], target_pos[1])
@@ -85,6 +90,7 @@ class Engine
           end
 
           if min_score <= alpha
+            break_signal = true
             break
           end
         end
@@ -114,44 +120,14 @@ class Engine
   end
 
 
-  def valid_move?(piece, target_pos)
-    # Basic bounds checking
-    return false if target_pos[0] < 0 || target_pos[0] > 7 || target_pos[1] < 0 || target_pos[1] > 7
-    
-    # Verify the move is in the piece's legal moves list
-    return false unless piece.moves.include?([target_pos[0], target_pos[1]])
-    
-    # Verify the target square is either empty or contains an enemy piece
-    target_piece = @board.pieces.find { |p| p.position == [target_pos[0], target_pos[1]] }
-    return true if target_piece.nil?
-    return target_piece.color != piece.color
-  end
-
   def random
     legal_moves = @board.get_moves
     random_piece = legal_moves.sample
     moves = random_piece[:to].to_a.sample
-
     @board.clear_previous_selection(only_moves: false)
     if moves
-      legal_moves.each do |move|
-        puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
-      end
       puts "Moving #{random_piece[:piece].name}"
       @board.make_move(random_piece[:piece], moves[0], moves[1])
-    end
-    puts puts puts
-    legal_moves = @board.get_moves
-    legal_moves.each do |move|
-      puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
-    end
-    # @board.unmake_move
-    legal_moves = @board.get_moves
-    puts 
-    puts 
-    puts
-    legal_moves.each do |move|
-      puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
     end
   end
 end

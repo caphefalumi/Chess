@@ -28,7 +28,7 @@ class Sounds
 end
 
 class PieceEval
-  NONE   = 0
+  NONE   = nil
   KING   = 1
   PAWN   = 2
   BISHOP = 3
@@ -37,20 +37,6 @@ class PieceEval
   QUEEN  = 6
   WHITE  = 8
   BLACK  = 16
-end
-
-# Helper function to return image file path based on piece
-def piece_image(piece)
-  color = piece & (0b01000 | 0b10000) == 8 ? "w" : "b"
-  type = piece & 0b00111
-  case type
-  when PieceEval::KING   then "pieces/#{color}k.png"
-  when PieceEval::QUEEN  then "pieces/#{color}q.png"
-  when PieceEval::ROOK   then "pieces/#{color}r.png"
-  when PieceEval::BISHOP then "pieces/#{color}b.png"
-  when PieceEval::KNIGHT then "pieces/#{color}n.png"
-  when PieceEval::PAWN   then "pieces/#{color}p.png"
-  end
 end
 
 
@@ -106,7 +92,7 @@ class Board
         # Get the piece at the current position
         piece_pos = @board[file][rank]
         # Create and store the piece object
-        if piece_pos != PieceEval::NONE
+        if piece_pos
           piece = Piece.new(rank * 80, file * 80, piece_pos, self)
           piece.render_piece
           @pieces.add(piece)
@@ -144,7 +130,7 @@ class Board
 
     @current_turn = @current_turn == "White" ? "Black" : "White"
     if @player_playing && @current_turn == "Black"
-      # @engine.random
+      @engine.minimax
     end
   end
 
@@ -280,6 +266,7 @@ class Board
     start_y = piece.y
 
     if @render 
+      # @target_square.remove if @target_square
       @target_square = Square.new(
         x: rank * 80,
         y: file * 80,
@@ -304,7 +291,7 @@ class Board
     # Promotion
     elsif piece.type == "Pawn" && (file == 7 || file == 0)
       promotion_ui
-      piece.promotion_flag = true
+      promotion_flag = true
     # En passant
     elsif @player_move_history.last && @player_move_history.last.color != piece.color && piece.type == "Pawn" && @player_move_history.last.type == "Pawn"
       if (start_x + 80 == piece.x || start_x - 80 == piece.x) && 
@@ -359,9 +346,9 @@ class Board
       piece_to_undo.is_moved = false
       piece_to_undo.can_castle = false
     end
-  
+
     # Handle promotion
-    if piece_to_undo.promoted[0] + 1 == @player_move_history.size && piece_to_undo.promoted[1] == true
+    if piece_to_undo.promoted[0] - 1 == @player_move_history.size && piece_to_undo.promoted[1] == true
       piece_to_undo.render.remove if @render
       piece_to_undo.promotion("Pawn")
       piece_to_undo.promoted = [@player_move_history.size, false]
@@ -453,7 +440,6 @@ class Board
     if piece.type != "King" && king.attacking_pieces.size == 2
       piece.moves.clear
     else
-      puts "AOK"
       update_legal_moves(piece, king)
     end
   end
@@ -495,7 +481,7 @@ class Board
     count = 0
     
     # Only calculate for non-knight pieces
-    if attacking_piece.type == "Knight"
+    if attacking_piece.type == "Night"
       blocking_squares.add([attacking_piece.rank, attacking_piece.file])
     else
       # Iterate to add each blocking square until reaching the attacking piece

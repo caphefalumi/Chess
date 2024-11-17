@@ -4,12 +4,11 @@ require 'set'
 
 
 class Piece
-  attr_reader :piece, :position, :render, :promoted, :blocking_squares
+  attr_reader :piece, :render, :promoted, :blocking_squares
   attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_en_passant, :captured_pieces, :promoted, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
   def initialize(x, y, piece, board)
     @x, @y, @piece, @board = x, y, piece, board
-    @piece_image = piece_image
     @attacking_pieces = Set.new()
     @moves = Array.new()
     @pre_x = Array.new()
@@ -21,32 +20,7 @@ class Piece
     @is_pinned = false
     @is_checked = false
     @can_en_passant = false
-  end
-
-  def piece_image()
-    color = @piece & (0b01000 | 0b10000) == 8 ? "w" : "b"
-    type = @piece & 0b00111
-    case type
-    when PieceEval::KING   then "pieces/#{color}k.png"
-    when PieceEval::QUEEN  then "pieces/#{color}q.png"
-    when PieceEval::ROOK   then "pieces/#{color}r.png"
-    when PieceEval::BISHOP then "pieces/#{color}b.png"
-    when PieceEval::KNIGHT then "pieces/#{color}n.png"
-    when PieceEval::PAWN   then "pieces/#{color}p.png"
-    end
-  end
-
-  def render_piece
-    puts @piece_image
-    puts
-    @render = Image.new(
-      @piece_image,
-      x: @x,
-      y: @y,
-      z: ZOrder::PIECE,
-      width: 80,
-      height: 80
-    )
+    @generating_moves = false
   end
 
   def rank
@@ -73,10 +47,24 @@ class Piece
     when PieceEval::QUEEN  then "Queen"
     when PieceEval::ROOK   then "Rook"
     when PieceEval::BISHOP then "Bishop"
-    when PieceEval::KNIGHT then "Knight"
+    when PieceEval::KNIGHT then "Night"
     when PieceEval::PAWN   then "Pawn"
-    else ""
     end
+  end
+  
+  def piece_image(piece_type)
+    return "pieces/#{color[0]}#{piece_type[0]}.png"
+  end
+
+  def render_piece
+    @render = Image.new(
+      piece_image(type[0]),
+      x: @x,
+      y: @y,
+      z: ZOrder::PIECE,
+      width: 80,
+      height: 80
+    )
   end
 
   def get_value
@@ -85,7 +73,7 @@ class Piece
     when "Queen" then 1000
     when "Rook" then 500
     when "Bishop" then 350
-    when "Knight" then 300
+    when "Night" then 300
     when "Pawn" then 100
     end
   end
@@ -96,7 +84,7 @@ class Piece
     case type
     when "King"    then king_moves
     when "Queen", "Rook", "Bishop" then sliding_moves(type)
-    when "Knight"  then knight_moves
+    when "Night"  then knight_moves
     when "Pawn"    then pawn_moves
     end
   end
@@ -109,6 +97,7 @@ class Piece
   end
 
   def king_moves
+    @generating_moves = true
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx,dy|
       add_move_if_legal(rank + dx, file + dy) if !is_checked?(rank + dx, file + dy)
@@ -119,6 +108,7 @@ class Piece
       add_move_if_legal(6, file) if king_side_rook && no_pieces_between(king_side_rook) && !is_checked?(6, file)
       add_move_if_legal(2, file) if queen_side_rook && no_pieces_between(queen_side_rook) && !is_checked?(2, file)
     end
+    @generating_moves = false
   end
 
   private def find_castling_rook(file_position)
@@ -162,7 +152,7 @@ class Piece
         if piece.type == "Pawn" && piece.rank == king_position[0]
           @is_checked = false
         else
-          @attacking_pieces.add(piece)
+          @attacking_pieces.add(piece) if !@generating_moves
           @is_checked = true
           break if @attacking_pieces.size == 2 # Optimization: Stop if two attackers are found
         end
@@ -263,12 +253,12 @@ class Piece
   def promotion(choice)
     piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Night" => PieceEval::KNIGHT, "Pawn" => PieceEval::PAWN }
     new_piece_type = piece_map[choice] || PieceEval::QUEEN
-    promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK))
+    promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK), choice)
   end
 
-  private def promote(new_piece_type)
+  private def promote(new_piece_type, choice)
     @piece = new_piece_type
-    @piece_image = piece_image(@piece)
+    @piece_image = piece_image(choice[0])
     @promoted = [@board.player_move_history.size, true]
     render_piece
     puts "#{color} promoted to #{type}!"
