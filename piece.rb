@@ -96,7 +96,7 @@ class Piece
     end
   end
 
-  def king_moves
+  private def king_moves
     @generating_moves = true
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx,dy|
@@ -127,7 +127,7 @@ class Piece
       return false if @board.pieces.any? { |piece| piece.x == file * 80 && piece.y == @y }
     end
   
-    true
+    return true
   end
   
 

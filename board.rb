@@ -183,12 +183,12 @@ class Board
 
   def get_moves()
     available_moves = Array.new()
-    king = @pieces.find { |p| p.type == "King" && p.color == @current_turn }
     pieces = @pieces.dup
     # Find all pieces for the current turn and calculate their moves
     pieces.each do |piece|
       next if piece.color != @current_turn # Skip pieces of the other color
       # Generate legal moves for this piece
+      king = @pieces.find{ |p| p.type == "King" && p.color == @current_turn }
       piece.generate_moves
       # For pieces that are pinned, calculate the blocking squares
       if @checked && piece.type != "King"
@@ -197,7 +197,10 @@ class Board
         handle_pin(piece, king)
       end
       # Add valid moves for this piece to the list, including its position
-      available_moves << { piece: piece, from: [piece.rank, piece.file], to: piece.moves } if piece.moves.any?
+    # Flatten the moves into a 1D array by adding each move individually
+      piece.moves.each do |move|
+        available_moves << { piece: piece, to: move }
+      end
     end
     return available_moves
   end
@@ -208,7 +211,8 @@ class Board
     # return if not piece  
     target_move = [rank, file]
     # # Check if the target move is in the list of legal moves
-    if !piece.moves.include?(target_move)
+    if !piece.moves.include?(target_move) && @player_playing
+
       handle_illegal_move
       reset_state_after_move
       return
@@ -224,12 +228,13 @@ class Board
     @player_move_history << piece 
 
     is_check
-    turn if !@promotion
     reset_state_after_move
+    turn if !@promotion
+
   end
   
   def is_check
-    king = @pieces.find { |p| p.type == "King" && p.color != @clicked_piece&.color }
+    king = @pieces.find { |p| p.type == "King" && p.color != @current_turn }
     # king.generate_moves
     if king&.is_checked?()
       @sounds.move_check.play if @render
@@ -357,6 +362,9 @@ class Board
   
     # Restore captured piece if any (regular capture)
     if captured_piece
+      piece_to_undo.captured_pieces.each do |piece|
+        puts "#{piece_to_undo.name} Captured piece: #{piece.name}"
+      end
       piece_to_undo.captured_pieces.pop
       captured_piece.render_piece if @render
       @pieces.add(captured_piece)
@@ -451,12 +459,13 @@ class Board
   end
   
   def update_legal_moves(piece, king)
-    blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first) 
-    piece.moves -= illegal_moves(blocking_squares, piece) 
+    if king.attacking_pieces.any?
+      blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first) 
+      piece.moves -= illegal_moves(blocking_squares, piece) 
+    end
   end
 
   def illegal_moves(blocking_squares, piece)
-    puts blocking_squares.inspect
     moves_to_delete = []
     if piece.type != "King"
       piece.moves.each do |move|
@@ -555,7 +564,7 @@ class Board
     @sounds.game_end.play
     game_result_ui
     # Winner text
-    @game_result.text = "#{@current_turn == "White" ? 'Black' : 'White'} wins by checkmate!"
+    @game_result.text = "#{@current_turn == "White" ? 'White' : 'Black'} wins by checkmate!"
   end
 
   def handle_checkmate()
