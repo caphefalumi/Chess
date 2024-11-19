@@ -130,7 +130,7 @@ class Board
 
     @current_turn = @current_turn == "White" ? "Black" : "White"
     if @player_playing && @current_turn == "Black"
-      @engine.minimax
+      # @engine.minimax
     end
   end
 
@@ -182,6 +182,7 @@ class Board
   end  
 
   def get_moves()
+    time = Time.new
     available_moves = Array.new()
     pieces = @pieces.dup
     # Find all pieces for the current turn and calculate their moves
@@ -223,6 +224,9 @@ class Board
 
     if target_piece
       capture_piece(piece, target_piece)
+      piece.capture_history << true
+    else
+      piece.capture_history << false
     end
 
     @player_move_history << piece 
@@ -264,6 +268,7 @@ class Board
   def move_piece(piece, rank, file)
     piece.pre_x << piece.x
     piece.pre_y << piece.y
+    piece.moved_at = @player_move_history.size if piece.moved_at == -1
     promotion_flag = false
     castle_flag = false
     en_passant_flag = false
@@ -330,6 +335,9 @@ class Board
     piece_to_undo.y = piece_to_undo.pre_y.pop
     piece_to_undo.render_piece if @render
   
+    if piece_to_undo.moved_at == @player_move_history.size
+      piece_to_undo.is_moved = false
+    end
     # Handle castling
     if piece_to_undo.type == "King" && (current_x - piece_to_undo.x).abs == 160
       # Determine which rook to move back
@@ -349,7 +357,6 @@ class Board
         rook.is_moved = false
       end
       piece_to_undo.is_moved = false
-      piece_to_undo.can_castle = false
     end
 
     # Handle promotion
@@ -358,19 +365,17 @@ class Board
       piece_to_undo.promotion("Pawn")
       piece_to_undo.promoted = [@player_move_history.size, false]
     end
-    captured_piece = piece_to_undo.captured_pieces.last
-  
+    is_captured = piece_to_undo.capture_history.pop
     # Restore captured piece if any (regular capture)
-    if captured_piece
-      piece_to_undo.captured_pieces.each do |piece|
-        puts "#{piece_to_undo.name} Captured piece: #{piece.name}"
+    if is_captured
+      captured_piece = piece_to_undo.captured_pieces.pop
+      if captured_piece
+        captured_piece.render_piece if @render
+        @pieces.add(captured_piece)
       end
-      piece_to_undo.captured_pieces.pop
-      captured_piece.render_piece if @render
-      @pieces.add(captured_piece)
     end
 
-  
+    @game_over = false
     # Clear highlights and reset state
     clear_previous_selection(only_moves: false)
     reset_state_after_move
@@ -560,11 +565,13 @@ class Board
   end
   
   def checkmate_ui()
-    @game_over = true
-    @sounds.game_end.play
-    game_result_ui
-    # Winner text
-    @game_result.text = "#{@current_turn == "White" ? 'White' : 'Black'} wins by checkmate!"
+    if @player_playing
+      @game_over = true
+      @sounds.game_end.play
+      game_result_ui
+      # Winner text
+      @game_result.text = "#{@current_turn == "White" ? 'White' : 'Black'} wins by checkmate!"
+    end
   end
 
   def handle_checkmate()

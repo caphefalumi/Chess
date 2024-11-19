@@ -5,7 +5,7 @@ require 'set'
 
 class Piece
   attr_reader :piece, :render, :promoted, :blocking_squares
-  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_en_passant, :captured_pieces, :promoted, :attacking_pieces, :is_pinned, :is_moved, :is_checked
+  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_en_passant, :moved_at, :captured_pieces, :promoted, :capture_history, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
   def initialize(x, y, piece, board)
     @x, @y, @piece, @board = x, y, piece, board
@@ -14,11 +14,13 @@ class Piece
     @pre_x = Array.new()
     @pre_y = Array.new()
     @captured_pieces = Array.new()
+    @capture_history = Array.new()
     @promoted = [0, false]
     @bot = false
     @is_moved = false
     @is_pinned = false
     @is_checked = false
+    @moved_at = -1
     @can_en_passant = false
     @generating_moves = false
   end

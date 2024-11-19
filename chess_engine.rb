@@ -43,21 +43,19 @@ class Engine
         
         piece, target_pos = move[:piece], move[:to]
         @move_travel += 1
-        @board.dup
         # Make move
         @board.make_move(piece, target_pos[0], target_pos[1])
         next_moves = @board.get_moves
   
         # Recursive evaluation
-        if @board.checked
-          score = -Float::INFINITY
+        if @board.game_over
+          score = Float::INFINITY
         else
           score = minimax_eval(next_moves, depth - 1, false, alpha, beta)
         end
         if score > max_score
           max_score = score
           if depth == @max_depth
-            puts "Best move: #{piece.name} to #{target_pos.inspect}"
             @best_move = [piece, target_pos]
           end
         end
@@ -69,6 +67,7 @@ class Engine
           alpha = max_score
         end
         if alpha >= beta
+          puts "OK"
           break
         end
       end
@@ -84,8 +83,8 @@ class Engine
         # Make move
         @board.make_move(piece, target_pos[0], target_pos[1])
         next_moves = @board.get_moves
-        if @board.checked
-          score = Float::INFINITY
+        if @board.game_over
+          score = -Float::INFINITY
         # Recursive evaluation
         else 
           score = minimax_eval(next_moves, depth - 1, true, alpha, beta)
@@ -93,7 +92,6 @@ class Engine
         if score < min_score
           min_score = score
           if depth == @max_depth
-            puts "Best move: #{piece.name} to #{target_pos.inspect}"
             @best_move = [piece, target_pos]
           end
         end
@@ -103,6 +101,8 @@ class Engine
         # Alpha-beta pruning
         beta = [beta, score].min
         if alpha >= beta
+          puts "OK"
+
           break
         end
       end
@@ -119,7 +119,6 @@ class Engine
       @board.render = false
       minimax_eval(moves, @max_depth, true)
       @board.render = true
-      puts @best_move
       if @best_move
         piece, target_pos = @best_move
         puts piece.moves.inspect

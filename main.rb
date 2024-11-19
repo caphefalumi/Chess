@@ -23,8 +23,6 @@ on :key_down do |event|
     moves.each do |move|
       puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
     end
-    puts 
-    puts puts
     board.unmake_move()
     moves = board.get_moves()
     moves.each do |move|
