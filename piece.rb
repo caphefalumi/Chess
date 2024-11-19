@@ -4,32 +4,25 @@ require 'set'
 
 
 class Piece
-  attr_reader :piece, :position, :render, :blocking_squares
-  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_castle, :can_en_passant, :capture_piece, :attacking_pieces, :is_pinned, :is_moved, :is_checked
+  attr_reader :piece, :render, :promoted, :blocking_squares
+  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_en_passant, :moved_at, :captured_pieces, :promoted, :capture_history, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
-  def initialize(x, y, piece, piece_image, board)
-    @x, @y, @piece, @piece_image, @board = x, y, piece, piece_image, board
+  def initialize(x, y, piece, board)
+    @x, @y, @piece, @board = x, y, piece, board
     @attacking_pieces = Set.new()
-    @moves = Set.new()
+    @moves = Array.new()
     @pre_x = Array.new()
     @pre_y = Array.new()
-    @capture_piece = Array.new()
+    @captured_pieces = Array.new()
+    @capture_history = Array.new()
+    @promoted = [0, false]
     @bot = false
     @is_moved = false
     @is_pinned = false
     @is_checked = false
+    @moved_at = -1
     @can_en_passant = false
-  end
-
-  def render_piece
-    @render = Image.new(
-      @piece_image,
-      x: @x,
-      y: @y,
-      z: ZOrder::PIECE,
-      width: 80,
-      height: 80
-    )
+    @generating_moves = false
   end
 
   def rank
@@ -52,24 +45,38 @@ class Piece
 
   def type
     case @piece & 0b00111
-      when PieceEval::KING   then "King"
-      when PieceEval::QUEEN  then "Queen"
-      when PieceEval::ROOK   then "Rook"
-      when PieceEval::BISHOP then "Bishop"
-      when PieceEval::KNIGHT then "Knight"
-      when PieceEval::PAWN   then "Pawn"
-      else ""
+    when PieceEval::KING   then "King"
+    when PieceEval::QUEEN  then "Queen"
+    when PieceEval::ROOK   then "Rook"
+    when PieceEval::BISHOP then "Bishop"
+    when PieceEval::KNIGHT then "Night"
+    when PieceEval::PAWN   then "Pawn"
     end
+  end
+  
+  def piece_image(piece_type)
+    return "pieces/#{color[0]}#{piece_type[0]}.png"
+  end
+
+  def render_piece
+    @render = Image.new(
+      piece_image(type[0]),
+      x: @x,
+      y: @y,
+      z: ZOrder::PIECE,
+      width: 80,
+      height: 80
+    )
   end
 
   def get_value
     case type
-      when "King" then 10000
-      when "Queen" then 930
-      when "Rook" then 480
-      when "Bishop" then 320
-      when "Knight" then 280
-      when "Pawn" then 100
+    when "King" then 10000
+    when "Queen" then 1000
+    when "Rook" then 500
+    when "Bishop" then 350
+    when "Night" then 300
+    when "Pawn" then 100
     end
   end
 
@@ -79,7 +86,7 @@ class Piece
     case type
     when "King"    then king_moves
     when "Queen", "Rook", "Bishop" then sliding_moves(type)
-    when "Knight"  then knight_moves
+    when "Night"  then knight_moves
     when "Pawn"    then pawn_moves
     end
   end
@@ -91,18 +98,19 @@ class Piece
     end
   end
 
-  def king_moves
+  private def king_moves
+    @generating_moves = true
     directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]
     directions.each do |dx,dy|
-      add_move_if_legal(@x / 80 + dx, @y / 80 + dy) if !is_checked?(@x / 80 + dx, @y / 80 + dy)
+      add_move_if_legal(rank + dx, file + dy) if !is_checked?(rank + dx, file + dy)
     end
-
-    if !is_moved
+    if !is_moved && !@board.checked
       king_side_rook = find_castling_rook(7 * 80)
       queen_side_rook = find_castling_rook(0)
-      add_move_if_legal(6, @y / 80) if king_side_rook && no_pieces_between(king_side_rook)
-      add_move_if_legal(2, @y / 80) if queen_side_rook && no_pieces_between(queen_side_rook)
+      add_move_if_legal(6, file) if king_side_rook && no_pieces_between(king_side_rook) && !is_checked?(6, file)
+      add_move_if_legal(2, file) if queen_side_rook && no_pieces_between(queen_side_rook) && !is_checked?(2, file)
     end
+    @generating_moves = false
   end
 
   private def find_castling_rook(file_position)
@@ -121,21 +129,35 @@ class Piece
       return false if @board.pieces.any? { |piece| piece.x == file * 80 && piece.y == @y }
     end
   
-    true
+    return true
   end
   
 
   def is_checked?(rank = @x / 80, file = @y / 80)
-  
     king_position = [rank, file]
     @is_checked = false
+  
     @board.pieces.each do |piece|
-      next if piece.color == color || piece.type == "King" # Only consider opponent pieces
+      next if piece.color == color # Only consider opponent pieces
+  
+      # Special case for opponent King: check adjacent squares
+      if piece.type == "King"
+        if (piece.rank - rank).abs <= 1 && (piece.file - file).abs <= 1
+          @is_checked = true
+          break
+        end
+        next
+      end
+  
       generate_bot_moves(piece)
       if piece.moves.include?(king_position)
-        break if @attacking_pieces.size > 2
-        @attacking_pieces.add(piece)
-        @is_checked = true
+        if piece.type == "Pawn" && piece.rank == king_position[0]
+          @is_checked = false
+        else
+          @attacking_pieces.add(piece) if !@generating_moves
+          @is_checked = true
+          break if @attacking_pieces.size == 2 # Optimization: Stop if two attackers are found
+        end
       end
     end
     return @is_checked
@@ -144,7 +166,7 @@ class Piece
 
   def is_pinned?
     return false if type == "King"
-    king = @board.pieces.find { |p| p.type == "King" && p.color == color && p.is_checked == false}
+    king = @board.pieces.find { |p| p.type == "King" && p.color == color }
     if king 
       @board.pieces.delete(self)
       if king.is_checked?()
@@ -154,9 +176,9 @@ class Piece
         @is_pinned = false
       end
     end
-    @board.pieces.add(self)
+    @board.pieces.to_set.add(self)
     return @is_pinned
-  end  
+  end
   
   private def generate_bot_moves(piece)
     piece.bot = true
@@ -194,11 +216,11 @@ class Piece
     rank, file = @x / 80, @y / 80
 
     # Single step
-    add_move_if_legal(rank, file + direction) if empty_square?(rank, file + direction) && !@bot
+    add_move_if_legal(rank, file + direction) if empty_square?(rank, file + direction)
 
     # Double step from starting rank
     if (color == "White" && file == 6) || (color == "Black" && file == 1)
-      add_move_if_legal(rank, file + 2 * direction) if empty_square?(rank, file + direction) && empty_square?(rank, file + 2 * direction) && !@bot
+      add_move_if_legal(rank, file + 2 * direction) if empty_square?(rank, file + direction) && empty_square?(rank, file + 2 * direction)
     end
 
     # Capture moves
@@ -209,8 +231,8 @@ class Piece
     add_en_passant_moves(rank, file, direction)
   end
 
-  private def empty_square?(x, y)
-    !@board.pieces.find { |p| p.x == x * 80 && p.y == y * 80 }
+  private def empty_square?(rank, file)
+    return !@board.pieces.any? { |p| p.rank == rank && p.file == file }
   end
 
   private def capture_pawn(target_rank, target_file)
@@ -221,23 +243,25 @@ class Piece
   end
 
   private def add_en_passant_moves(rank, file, direction)
-    if @board.last_move&.type == "Pawn" && @board.last_move.can_en_passant
+    last_move = @board.player_move_history.last
+    if last_move&.type == "Pawn" && last_move&.can_en_passant
       en_passant_positions = [[rank - 1, file], [rank + 1, file]]
       en_passant_positions.each do |target_rank, _|
-        add_move_if_legal(target_rank, file + direction) if @board.last_move.x == target_rank * 80 && @board.last_move.y == @y
+        add_move_if_legal(target_rank, file + direction) if last_move.x == target_rank * 80 && last_move.y == @y
       end
     end
   end
 
   def promotion(choice)
-    piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Night" => PieceEval::KNIGHT }
+    piece_map = { "Queen" => PieceEval::QUEEN, "Rook" => PieceEval::ROOK, "Bishop" => PieceEval::BISHOP, "Night" => PieceEval::KNIGHT, "Pawn" => PieceEval::PAWN }
     new_piece_type = piece_map[choice] || PieceEval::QUEEN
-    promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK))
+    promote(new_piece_type | (color == "White" ? PieceEval::WHITE : PieceEval::BLACK), choice)
   end
 
-  private def promote(new_piece_type)
+  private def promote(new_piece_type, choice)
     @piece = new_piece_type
-    @piece_image = piece_image(@piece)
+    @piece_image = piece_image(choice[0])
+    @promoted = [@board.player_move_history.size, true]
     render_piece
     puts "#{color} promoted to #{type}!"
   end
@@ -247,16 +271,16 @@ class Piece
     
     target_piece = @board.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80}
     # Empty square or perform a xray attack  
-    if target_piece.nil? || (target_piece.type == "King" && target_piece.color != color)
-      @moves.add([new_x, new_y])
+    if target_piece.nil? || (target_piece.type == "King" && target_piece.color != color && @bot)
+      @moves.push([new_x, new_y])
       true
     # Capture a piece
     elsif target_piece.color != color
-      @moves.add([new_x, new_y])
+      @moves.push([new_x, new_y])
       false
     # Protect a friendly piece
     elsif target_piece.color == color && @bot
-      @moves.add([new_x, new_y])
+      @moves.push([new_x, new_y])
       false
     end
     

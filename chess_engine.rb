@@ -1,34 +1,18 @@
 require_relative 'eval_table'
 
-
 class Engine
-
   def initialize(board)
     @board = board
+    @best_move = nil
     @max_depth = 2
-    @black_score = 0 
-    @white_score = 0  
+    @node_travel = 0
+    @move_travel = 0
   end
 
-  private def position_value(piece)
-    
-    rank = piece.color == "Black" ? 7 - piece.rank : piece.rank
-    position = piece.file * 8 + rank
-    # puts "#{piece.rank} #{piece.rank}"
-    table = case piece.type
-            when "Pawn" then PAWN_TABLE
-            when "Knight" then KNIGHTS_TABLE
-            when "Bishop" then BISHOPS_TABLE
-            when "Rook" then ROOKS_TABLE
-            when "Queen" then QUEENS_TABLE
-            when "King" then KINGS_TABLE
-            end
-    return table[position]
-  end
-  
-  private def evaluate(maximizing_color)
-    black_score = 0 
-    white_score = 0  
+  def evaluate(maximizing_player)
+    black_score = 0
+    white_score = 0
+
     @board.pieces.each do |piece|
       if piece.color == "White"
         white_score += piece.get_value
@@ -36,131 +20,127 @@ class Engine
         black_score += piece.get_value
       end
     end
+
     evaluation = white_score - black_score
-    perspective = maximizing_color == "White" ? 1 : -1
+    perspective = maximizing_player ? -1 : 1
     return evaluation * perspective
+  end
+
+  
+
+  private def minimax_eval(legal_moves, depth, maximizing_player, alpha = -Float::INFINITY, beta = Float::INFINITY)
+    # Base case: check for max depth or game over state
+    if depth == 0 || @board.game_over
+      return evaluate(maximizing_player)
+    end
+    
+    @node_travel += 1
+  
+    if maximizing_player
+      max_score = -Float::INFINITY
+  
+      legal_moves.each do |move|
+        
+        piece, target_pos = move[:piece], move[:to]
+        @move_travel += 1
+        # Make move
+        @board.make_move(piece, target_pos[0], target_pos[1])
+        next_moves = @board.get_moves
+  
+        # Recursive evaluation
+        if @board.game_over
+          score = Float::INFINITY
+        else
+          score = minimax_eval(next_moves, depth - 1, false, alpha, beta)
+        end
+        if score > max_score
+          max_score = score
+          if depth == @max_depth
+            @best_move = [piece, target_pos]
+          end
+        end
+  
+        @board.unmake_move
+  
+        # Alpha-beta pruning
+        if max_score > alpha
+          alpha = max_score
+        end
+        if alpha >= beta
+          puts "OK"
+          break
+        end
+      end
+      return max_score
+  
+    else
+      min_score = Float::INFINITY
+  
+      legal_moves.each do |move|
+  
+        piece, target_pos = move[:piece], move[:to]
+  
+        # Make move
+        @board.make_move(piece, target_pos[0], target_pos[1])
+        next_moves = @board.get_moves
+        if @board.game_over
+          score = -Float::INFINITY
+        # Recursive evaluation
+        else 
+          score = minimax_eval(next_moves, depth - 1, true, alpha, beta)
+        end
+        if score < min_score
+          min_score = score
+          if depth == @max_depth
+            @best_move = [piece, target_pos]
+          end
+        end
+  
+        @board.unmake_move
+  
+        # Alpha-beta pruning
+        beta = [beta, score].min
+        if alpha >= beta
+          puts "OK"
+
+          break
+        end
+      end
+      return min_score
+    end
   end
   
 
+  # Finds and executes the best move using Minimax
   def minimax
-    # Store all possible moves and their evaluated scores
-    best_score = -Float::INFINITY
-    best_piece = nil
-    best_move = nil
-    
-    # Get all pieces of current color
-    current_pieces = @board.pieces.select { |p| p.color == @board.current_turn}
-    
-    # Evaluate each possible move
-    current_pieces.each do |piece|
-      piece.generate_moves
-      
-      piece.moves.each do |move|
-        # Make temporary move
-        temp_state = make_temp_move(piece, move)
-        
-        # Evaluate position after move
-        score = minimax_eval(@max_depth - 1, false)
-        
-        # Undo temporary move
-        undo_temp_move(piece, temp_state)
-        
-        # Update best move if better score found
-        if score > best_score
-          best_score = score
-          best_piece = piece
-          best_move = move
-        end
+      @best_move = nil
+      @board.player_playing = false
+      moves = @board.get_moves
+      @board.render = false
+      minimax_eval(moves, @max_depth, true)
+      @board.render = true
+      if @best_move
+        piece, target_pos = @best_move
+        puts piece.moves.inspect
+        puts "Best move: #{piece.name} to #{target_pos}"
+        puts "Total nodes search #{@node_travel}"
+        puts "Total moves search #{@move_travel}"
+        # Execute the best move
+        @board.make_move(piece, target_pos[0], target_pos[1])
       end
-    end
+      @node_travel = 0
 
-    # Execute the best move found
-    Thread.new do
-      sleep(0.1)
-      if best_piece && best_move
-        @board.clear_previous_selection(only_moves: false)
-        @board.clicked_piece = best_piece
-        @board.highlight_selected_piece(best_piece.x, best_piece.y)
-        @board.make_move(best_move[0], best_move[1])
-      end
-    end
   end
 
-  private
 
-  def minimax(depth, maximizing_player, maximizing_color)
-    # Base case: if we've reached max depth or game over
-    if depth == 0 || @board.game_over
-      return nil, evaluate(maximizing_color)
-    end
-    moves = @board.get_moves
-    best_move = moves.sample
-    if maximizing_player
-      max_eval = -Float::INFINITY
-      
-      moves.each do |move|
-        @board.make_move(move[0], move[1], move[2])
-        current_eval = minimax(depth - 1, false, maximizing_color)[1]
-        @board.unmake_move()
-        if current_eval > max_eval
-          max_eval = current_eval
-          best_move = move
-        end
-      end
-      return max_eval
-    else
-      min_eval = Float::INFINITY
-      
-      moves.each do |move|
-        @board.make_move(move[0], move[1], move[2])
-        current_eval = minimax(depth - 1, true, maximizing_color)[1]
-        @board.unmake_move()
-        if current_eval < min_eval
-          min_eval = current_eval
-          best_move = move
-        end
-      end
-      return best_move, min_eval
-      
-    end
-  end
-
-  # Generates a random legal move for black
-  public def random
-    pieces = @board.pieces.select { |p| p.color == @board.current_turn}
-    return if pieces.empty?
-
-    # Select a random black piece
-    piece_to_move = pieces.sample
-    piece_to_move.generate_moves
-
-    # Get the current position of the piece
-    current_x, current_y = piece_to_move.position
-    king = @board.pieces.find { |p| p.type == "King" && p.color == @board.current_turn}
-    # Continue sampling until a piece with available moves is found
-    while piece_to_move.moves.to_a.empty? || !piece_to_move.moves.to_a.sample[0].between?(0, 7) || !piece_to_move.moves.to_a.sample[1].between?(0, 7) || (piece_to_move.moves.to_a.sample[0] == current_x && piece_to_move.moves.to_a.sample[1] == current_y)
-      piece_to_move = pieces.sample
-      piece_to_move.generate_moves
-      if @board.checked
-        @board.handle_check(piece_to_move, king)
-      else
-        @board.handle_pin(piece_to_move, king)
-      end
-    end
-
-    # Create a new thread for the delay
-    Thread.new do
-      sleep(rand(1..1))  # Wait for 1 second
-      # Store the piece and move
-      @board.clear_previous_selection(only_moves: false)
-      @board.clicked_piece = piece_to_move
-      move = piece_to_move.moves.to_a.sample
-      if @board.clicked_piece
-        
-        @board.highlight_selected_piece(@board.clicked_piece.x, @board.clicked_piece.y)
-        @board.make_move(move[0], move[1])
-        # Switch turns to white after AI move
-      end
+  def random
+    legal_moves = @board.get_moves
+    random_piece = legal_moves.sample
+    moves = random_piece[:to].to_a.sample
+    @board.clear_previous_selection(only_moves: false)
+    if moves
+      puts "Moving #{random_piece[:piece].name}"
+      @board.make_move(random_piece[:piece], moves[0], moves[1])
     end
   end
 end

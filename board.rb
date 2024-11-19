@@ -28,7 +28,7 @@ class Sounds
 end
 
 class PieceEval
-  NONE   = 0
+  NONE   = nil
   KING   = 1
   PAWN   = 2
   BISHOP = 3
@@ -39,37 +39,22 @@ class PieceEval
   BLACK  = 16
 end
 
-# Helper function to return image file path based on piece
-def piece_image(piece)
-  color = piece & (0b01000 | 0b10000) == 8 ? "w" : "b"
-  type = piece & 0b00111
-  case type
-  when PieceEval::KING   then "pieces/#{color}k.png"
-  when PieceEval::QUEEN  then "pieces/#{color}q.png"
-  when PieceEval::ROOK   then "pieces/#{color}r.png"
-  when PieceEval::BISHOP then "pieces/#{color}b.png"
-  when PieceEval::KNIGHT then "pieces/#{color}n.png"
-  when PieceEval::PAWN   then "pieces/#{color}p.png"
-  end
-end
-
 
 class Board
-  attr_reader :pieces, :last_move, :checked, :game_over
-  attr_accessor :clicked_piece, :current_turn
+  attr_reader :checked, :game_over
+  attr_accessor :clicked_piece, :pieces, :current_turn, :render, :player_playing, :player_move_history, :bot_move_history
   def initialize
     @sounds = Sounds.new()
     @pieces = Set.new()
     @moves = Set.new()
-    @valid_moves = Set.new()
-    @move_history_past = Array.new()
-    @move_history_future = Array.new()
-    @number_of_moves = -1
+    @player_move_history = Array.new()
+    @bot_move_history = Array.new()
     @clicked_piece = nil
-    @last_move = nil
     @checked = false
     @promotion = false
     @is_piece_clicked = false
+    @player_playing = true
+    @render = true
     @current_turn = "White"
     @board = initialize_board
     @engine = Engine.new(self)
@@ -90,9 +75,9 @@ class Board
   end
 
   def draw_board
-    (0..8).each do |rank|  # Count down from 7 to 0
-      (0...8).each do |file|       # Still count up from 0 to 7 for files
-        is_light_square = (rank + file) % 2 != 0
+    (0..8).each do |rank|
+      (0...8).each do |file|
+        is_light_square = (rank + file) & 1 != 0
         square_color = is_light_square ? "#6e4e36" : "#b99b75"
   
         # Draw square
@@ -106,10 +91,9 @@ class Board
   
         # Get the piece at the current position
         piece_pos = @board[file][rank]
-        image_file = piece_image(piece_pos)
         # Create and store the piece object
-        if image_file
-          piece = Piece.new(rank * 80, file * 80, piece_pos, image_file, self)
+        if piece_pos
+          piece = Piece.new(rank * 80, file * 80, piece_pos, self)
           piece.render_piece
           @pieces.add(piece)
         end
@@ -136,16 +120,18 @@ class Board
         if !@is_piece_clicked
           select_piece(rank, file)
         else
-          make_move(rank, file)
+          make_move(@clicked_piece, rank, file)
         end
       end
     end
   end
   
   def turn
-    @last_move = @clicked_piece
-    # @current_turn = @current_turn == "White" ? "Black" : "White"
-    # @engine.random
+
+    @current_turn = @current_turn == "White" ? "Black" : "White"
+    if @player_playing && @current_turn == "Black"
+      # @engine.minimax
+    end
   end
 
   def area_clicked(leftX, topY, rightX, bottomY)
@@ -154,9 +140,10 @@ class Board
 
   def select_piece(rank, file)
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
-
+    @player_playing = true
     if @clicked_piece
       king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color }
+      @clicked_piece.bot = false
       @clicked_piece.generate_moves
       if @checked
         handle_check(@clicked_piece, king)
@@ -164,7 +151,7 @@ class Board
         handle_pin(@clicked_piece, king)
       end
 
-      highlight_selected_piece(@clicked_piece.x, @clicked_piece.y)
+      highlight_selected_piece(rank, file)
       draw_possible_moves(@clicked_piece.moves)
       @is_piece_clicked = true
     end
@@ -194,40 +181,39 @@ class Board
     end
   end  
 
-  def get_moves
-    available_moves = []
-
+  def get_moves()
+    time = Time.new
+    available_moves = Array.new()
+    pieces = @pieces.dup
     # Find all pieces for the current turn and calculate their moves
-    @pieces.each do |piece|
+    pieces.each do |piece|
       next if piece.color != @current_turn # Skip pieces of the other color
-
       # Generate legal moves for this piece
+      king = @pieces.find{ |p| p.type == "King" && p.color == @current_turn }
       piece.generate_moves
-
       # For pieces that are pinned, calculate the blocking squares
-      if @checked
+      if @checked && piece.type != "King"
         handle_check(piece, king) 
-      else
+      elsif piece.type != "King"
         handle_pin(piece, king)
       end
-
       # Add valid moves for this piece to the list, including its position
-      available_moves << [ piece, [piece.rank, piece.file], piece.moves ]
+    # Flatten the moves into a 1D array by adding each move individually
+      piece.moves.each do |move|
+        available_moves << { piece: piece, to: move }
+      end
     end
-
     return available_moves
   end
 
   
   # Attempts to move the piece or capture an opponent piece
-  def make_move(piece = @clicked_piece, rank, file)
-    return if not piece  
-  
+  def make_move(piece, rank, file)
+    # return if not piece  
     target_move = [rank, file]
-  
-    # Check if the target move is in the list of legal moves
-    if not piece.moves.include?(target_move)
-      clear_previous_selection(only_moves: false)
+    # # Check if the target move is in the list of legal moves
+    if !piece.moves.include?(target_move) && @player_playing
+
       handle_illegal_move
       reset_state_after_move
       return
@@ -236,24 +222,27 @@ class Board
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     move_piece(piece, rank, file)
 
-    if target_piece&.color == piece.color
-      handle_illegal_move
-
-    elsif target_piece
+    if target_piece
       capture_piece(piece, target_piece)
+      piece.capture_history << true
+    else
+      piece.capture_history << false
     end
-    @move_history_past << piece
+
+    @player_move_history << piece 
+
     is_check
-    
+    reset_state_after_move
     turn if !@promotion
 
-    reset_state_after_move
   end
   
   def is_check
-    king = @pieces.find { |p| p.type == "King" && p.color != @clicked_piece.color }
-    king.generate_moves
+    king = @pieces.find { |p| p.type == "King" && p.color != @current_turn }
+    # king.generate_moves
     if king&.is_checked?()
+      @sounds.move_check.play if @render
+      @checked = true
       @no_legal_moves = true
       blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first)
       @pieces.each do |loop_piece|
@@ -265,14 +254,13 @@ class Board
           end
         end
       end
+
+      king.generate_moves
       if @no_legal_moves && king.moves.empty?
         checkmate_ui
-      else
-        @sounds.move_check.play
-        @checked = true
       end
     else
-      king&.attacking_pieces.clear
+      king&.attacking_pieces&.clear
       @checked = false
     end
   end
@@ -280,32 +268,34 @@ class Board
   def move_piece(piece, rank, file)
     piece.pre_x << piece.x
     piece.pre_y << piece.y
-    @target_square = Square.new(
-      x: rank * 80,
-      y: file * 80,
-      z: ZOrder::OVERLAP,
-      size: 80,
-      color: "#B58B37"
-    )
-    @target_square.color.opacity = 0.8
-    castle_flag = false
-    capture_flag = false
+    piece.moved_at = @player_move_history.size if piece.moved_at == -1
     promotion_flag = false
+    castle_flag = false
     en_passant_flag = false
     start_x = piece.x
     start_y = piece.y
 
-    render_at_new_pos(rank, file)
+    if @render 
+      # @target_square.remove if @target_square
+      @target_square = Square.new(
+        x: rank * 80,
+        y: file * 80,
+        z: ZOrder::OVERLAP,
+        size: 80,
+        color: "#B58B37"
+      )
+      @target_square.color.opacity = 0.8
+
+    end
+    render_at_new_pos(piece, rank, file)
 
     if piece.type == "Pawn" && ((start_y + 160 == piece.y && piece.color == "Black") || 
       (start_y - 160 == piece.y && piece.color == "White"))
       piece.can_en_passant = true
-    elsif piece.type == "King" && start_x == 4 * 80 && (rank == 6 || rank == 2)
-      piece.can_castle = true
     end
 
     # Castle
-    if piece.type == "King" && (rank == 6 || rank == 2) && piece.can_castle
+    if piece.type == "King" && start_x == 4 * 80 && (rank == 6 || rank == 2)
       castle(rank, file)
       castle_flag = true
     # Promotion
@@ -313,101 +303,95 @@ class Board
       promotion_ui
       promotion_flag = true
     # En passant
-    elsif @last_move && @last_move.color != piece.color && piece.type == "Pawn" && @last_move.type == "Pawn" && @last_move.can_en_passant 
+    elsif @player_move_history.last && @player_move_history.last.color != piece.color && piece.type == "Pawn" && @player_move_history.last.type == "Pawn"
       if (start_x + 80 == piece.x || start_x - 80 == piece.x) && 
         ((start_y + 80 == piece.y && piece.color == "Black") || 
         (start_y - 80 == piece.y && piece.color == "White"))
         
-        capture_piece(@clicked_piece, @last_move)
+        capture_piece(@clicked_piece, @player_move_history.last)
         en_passant_flag = true
       end
     end
 
-    if !castle_flag && !capture_flag && !promotion_flag && !en_passant_flag
+    if !promotion_flag && !castle_flag && !en_passant_flag && @render
       @sounds.move_self.play 
     end
   end
   
   def unmake_move
-
     # Return if there are no past moves
-    return if @move_history_past.empty?
+    return if @player_move_history.empty?
   
     # Get the last moved piece from the history
-    piece_to_undo = @move_history_past.pop
+    piece_to_undo = @player_move_history.pop
     # If there's no piece to undo, return early
     return if piece_to_undo.nil?
-  
+
+    current_x = piece_to_undo.x
+    
     # Restore the piece's previous position
-    piece_to_undo.render.remove
+    piece_to_undo.render.remove if @render
     piece_to_undo.x = piece_to_undo.pre_x.pop
     piece_to_undo.y = piece_to_undo.pre_y.pop
-    piece_to_undo.render_piece
+    piece_to_undo.render_piece if @render
   
-    # # Restore captured piece if any
-    if piece_to_undo.capture_piece.last
-      captured_piece = piece_to_undo.capture_piece.pop
-      captured_piece.render_piece
-      @pieces.add(captured_piece)
+    if piece_to_undo.moved_at == @player_move_history.size
+      piece_to_undo.is_moved = false
     end
-  
-    # Reset en passant flag if necessary
-    piece_to_undo.can_en_passant = false if piece_to_undo.type == "Pawn"
-  
-    # Move the undone move to the future history for redo
-    @move_history_future << piece_to_undo
-  
+    # Handle castling
+    if piece_to_undo.type == "King" && (current_x - piece_to_undo.x).abs == 160
+      # Determine which rook to move back
+      rook_old_x = current_x > piece_to_undo.x ? 5 * 80 : 3 * 80
+      rook_new_x = current_x > piece_to_undo.x ? 7 * 80 : 0
+      rook = @pieces.find { |p| 
+        p.type == "Rook" && 
+        p.color == piece_to_undo.color && 
+        p.x == rook_old_x && 
+        p.y == piece_to_undo.y
+      }
+      
+      if rook
+        rook.render.remove if @render
+        rook.x = rook_new_x
+        rook.render_piece if @render
+        rook.is_moved = false
+      end
+      piece_to_undo.is_moved = false
+    end
+
+    # Handle promotion
+    if piece_to_undo.promoted[0] - 1 == @player_move_history.size && piece_to_undo.promoted[1] == true
+      piece_to_undo.render.remove if @render
+      piece_to_undo.promotion("Pawn")
+      piece_to_undo.promoted = [@player_move_history.size, false]
+    end
+    is_captured = piece_to_undo.capture_history.pop
+    # Restore captured piece if any (regular capture)
+    if is_captured
+      captured_piece = piece_to_undo.captured_pieces.pop
+      if captured_piece
+        captured_piece.render_piece if @render
+        @pieces.add(captured_piece)
+      end
+    end
+
+    @game_over = false
     # Clear highlights and reset state
     clear_previous_selection(only_moves: false)
     reset_state_after_move
   
     # Switch turn back to the previous player
     @current_turn = @current_turn == "White" ? "Black" : "White"
-    @number_of_moves -= 1
-  end
   
 
-  # TODO: NEED TO BE FIXED
-  def remake_move
-    return if @pieces.empty? || @move_history_future.nil?
-    
-    # Store the piece that was last moved
-    piece_to_undo = @move_history_future.last
-    
-    # Revert the piece position to its previous position
-    piece_to_undo.render.remove
-    piece_to_undo.x = piece_to_undo.pre_x
-    piece_to_undo.y = piece_to_undo.pre_y
-    piece_to_undo.render_piece
-    
-    # If there was a capture, restore the captured piece
-    if piece_to_undo.capture_piece
-      captured_piece = piece_to_undo.capture_piece
-      captured_piece.render_piece
-      @pieces.add(captured_piece)
-      piece_to_undo.capture_piece = nil
-    end
-    
-    # Reset en passant flag if it was set
-    piece_to_undo.can_en_passant = false if piece_to_undo.type == "Pawn"
-    
-    # Clear any highlighted squares or moves
-    clear_previous_selection(only_moves: false)
-    
-    # Reset all states
-    reset_state_after_move
-    
-    # Reset the last move
-    @move_history_past << @move_history_future.last
-    @move_history_future.delete(@move_history_future.last)
   end
 
   # Captures the opponent's piece
   def capture_piece(piece, target_piece)
-    target_piece.render.remove
+    target_piece.render.remove if @render
     @pieces.delete(target_piece)
-    @sounds.capture.play
-    piece.capture_piece << target_piece
+    @sounds.capture.play if @render
+    piece.captured_pieces << target_piece
   end
 
   def promotion_ui()
@@ -457,14 +441,11 @@ class Board
   def castle(rank, file)
     rook_x = rank == 6 ? 7 * 80 : 0
     rook = @pieces.find { |p| p.type == "Rook" && p.color == @clicked_piece.color && p.x == rook_x && p.is_moved == false}
-    rook_new_x = rank == 6 ? 5 * 80 : 3 * 80
+    rook_new_x = rank == 6 ? 5 : 3
     if rook
       # Move rook to its new position
-      rook.render.remove
-      rook.x = rook_new_x
-      rook.render_piece
-      rook.is_moved = true
-      @sounds.castle.play
+      render_at_new_pos(rook, rook_new_x, rook.file)
+      @sounds.castle.play if @render
     end
   end
 
@@ -473,7 +454,6 @@ class Board
       piece.moves.clear
     else
       update_legal_moves(piece, king)
-
     end
   end
 
@@ -484,8 +464,10 @@ class Board
   end
   
   def update_legal_moves(piece, king)
-    blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first) 
-    piece.moves -= illegal_moves(blocking_squares, piece) 
+    if king.attacking_pieces.any?
+      blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first) 
+      piece.moves -= illegal_moves(blocking_squares, piece) 
+    end
   end
 
   def illegal_moves(blocking_squares, piece)
@@ -494,8 +476,6 @@ class Board
       piece.moves.each do |move|
         if !blocking_squares.include?(move)
           moves_to_delete << move
-        else
-          @no_legal_moves = false
         end
       end
     end
@@ -515,8 +495,7 @@ class Board
     count = 0
     
     # Only calculate for non-knight pieces
-    if attacking_piece.type == "Knight"
-      puts "OK"
+    if attacking_piece.type == "Night"
       blocking_squares.add([attacking_piece.rank, attacking_piece.file])
     else
       # Iterate to add each blocking square until reaching the attacking piece
@@ -586,11 +565,13 @@ class Board
   end
   
   def checkmate_ui()
-    @game_over = true
-    @sounds.game_end.play
-    game_result_ui
-    # Winner text
-    @game_result.text = "#{@current_turn == "White" ? 'Black' : 'White'} wins by checkmate!"
+    if @player_playing
+      @game_over = true
+      @sounds.game_end.play
+      game_result_ui
+      # Winner text
+      @game_result.text = "#{@current_turn == "White" ? 'White' : 'Black'} wins by checkmate!"
+    end
   end
 
   def handle_checkmate()
@@ -605,12 +586,12 @@ class Board
   end
 
   # Move the clicked piece to the new coordinates
-  def render_at_new_pos(rank, file)
-    @clicked_piece.is_moved = true
-    @clicked_piece.render.remove  
-    @clicked_piece.x = rank * 80 
-    @clicked_piece.y = file * 80
-    @clicked_piece.render_piece
+  def render_at_new_pos(piece, rank, file)
+    piece.is_moved = true
+    piece.render.remove if @render
+    piece.x = rank * 80 
+    piece.y = file * 80
+    piece.render_piece if @render
   end
 
   # Highlight the illegal move visually
@@ -633,12 +614,11 @@ class Board
   end
 
   # Highlights the selected piece on the board
-  def highlight_selected_piece(x, y)
+  def highlight_selected_piece(rank, file)
     clear_previous_selection(only_moves: false)
-
     @clicked_square = Square.new(
-      x: x,
-      y: y,
+      x: rank * 80,
+      y: file * 80,
       z: ZOrder::OVERLAP,
       size: 80,
       color: "#B58B37"
@@ -647,8 +627,10 @@ class Board
   end
   
   def handle_illegal_move
-    @sounds.illegal.play
-    highlight_illegal_move(@clicked_piece)
+    if @render
+      @sounds.illegal.play
+      highlight_illegal_move(@clicked_piece)
+    end
     @illegal_state = true
   end
 
@@ -676,10 +658,8 @@ class Board
     @target_square&.remove
     @moves.each(&:remove)
     @moves.clear
-    @last_move = nil
     @current_turn = "White"
     @checked = false
-    @valid_moves = nil
     @clicked_piece = nil
     @is_piece_clicked = false
     @game_over = false
