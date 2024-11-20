@@ -41,8 +41,8 @@ end
 
 
 class Board
-  attr_reader :checked, :game_over
-  attr_accessor :clicked_piece, :pieces, :current_turn, :render, :player_playing, :player_move_history, :bot_move_history
+  attr_reader :game_over, :checked, :checked_king
+  attr_accessor :clicked_piece, :time, :pieces, :current_turn, :render, :player_playing, :player_move_history, :bot_move_history
   def initialize
     @sounds = Sounds.new()
     @pieces = Set.new()
@@ -54,6 +54,7 @@ class Board
     @promotion = false
     @is_piece_clicked = false
     @player_playing = true
+    @time = 0
     @render = true
     @current_turn = "White"
     @board = initialize_board
@@ -61,6 +62,12 @@ class Board
     draw_board
   end
 
+  # Initializes a new chess board.
+  #
+  # This method returns a 2D array representing a chess board. The
+  # array is 8x8 and each element of the array is a Piece object.
+  # The board is initialized with the standard starting pieces.
+  #
   def initialize_board
     [
       [PieceEval::ROOK | PieceEval::BLACK, PieceEval::KNIGHT | PieceEval::BLACK, PieceEval::BISHOP | PieceEval::BLACK, PieceEval::QUEEN | PieceEval::BLACK, PieceEval::KING | PieceEval::BLACK, PieceEval::BISHOP | PieceEval::BLACK, PieceEval::KNIGHT | PieceEval::BLACK, PieceEval::ROOK | PieceEval::BLACK],
@@ -74,6 +81,13 @@ class Board
     ]
   end
 
+  # Draws the board and pieces.
+  #
+  # This method is used to draw the board as well as all the pieces
+  # on the board. It iterates over the @board array and draws a
+  # square at each position. If the square contains a piece, it
+  # creates a new Piece object, renders it, and adds it to the
+  # @pieces set.
   def draw_board
     (0..8).each do |rank|
       (0...8).each do |file|
@@ -126,21 +140,23 @@ class Board
     end
   end
   
+  # Switches the current turn to the other player.
+  # If the game is in player vs AI mode and the current turn is black, the AI makes a move.
   def turn
-
     @current_turn = @current_turn == "White" ? "Black" : "White"
-    if @player_playing && @current_turn == "Black"
-      # @engine.minimax
+    if @player_playing && @current_turn == "Black" && !@game_over
+      @engine.minimax
     end
   end
 
+  # Returns true if the mouse click is within the given area
   def area_clicked(leftX, topY, rightX, bottomY)
 		return @mouse_x >= leftX && @mouse_x <= rightX && @mouse_y >= topY && @mouse_y <= bottomY
   end
 
+  # Selects a piece at the given rank and file, and handles the case if it is in check or pinned
   def select_piece(rank, file)
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
-    @player_playing = true
     if @clicked_piece
       king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color }
       @clicked_piece.bot = false
@@ -181,39 +197,44 @@ class Board
     end
   end  
 
+  # Finds all possible moves for the current turn.
+  #
+  # @return [Set] a set of hashes containing the piece and its target move
+  #   Each hash has the keys :piece and :to
+  #   :piece is the Piece object
+  #   :to is an array [rank, file] of the target move
+  # @example
+  #   get_moves
+  #   # => [{ piece: Piece, to: [rank, file] }, { ... }]
   def get_moves()
-    time = Time.new
-    available_moves = Array.new()
-    pieces = @pieces.dup
+    time1 = Time.new
+    available_moves = Set.new
     # Find all pieces for the current turn and calculate their moves
-    pieces.each do |piece|
+    @pieces.each do |piece|
       next if piece.color != @current_turn # Skip pieces of the other color
       # Generate legal moves for this piece
-      king = @pieces.find{ |p| p.type == "King" && p.color == @current_turn }
       piece.generate_moves
-      # For pieces that are pinned, calculate the blocking squares
-      if @checked && piece.type != "King"
-        handle_check(piece, king) 
-      elsif piece.type != "King"
-        handle_pin(piece, king)
-      end
-      # Add valid moves for this piece to the list, including its position
-    # Flatten the moves into a 1D array by adding each move individually
       piece.moves.each do |move|
-        available_moves << { piece: piece, to: move }
+        available_moves.add ({ piece: piece, to: move })
       end
     end
+    time2 = Time.new
+    time = time2 - time1
+    @time += time
     return available_moves
   end
 
-  
+  def order_moves(moves)
+    moves.sort_by { |move| move[:piece].moves.index(move[:to]) }
+  end
+
   # Attempts to move the piece or capture an opponent piece
   def make_move(piece, rank, file)
     # return if not piece  
     target_move = [rank, file]
     # # Check if the target move is in the list of legal moves
     if !piece.moves.include?(target_move) && @player_playing
-
+      
       handle_illegal_move
       reset_state_after_move
       return
@@ -230,18 +251,22 @@ class Board
     end
 
     @player_move_history << piece 
-
+    
     is_check
     reset_state_after_move
     turn if !@promotion
 
   end
   
+  # Checks if the current turn's king is under attack.
+  #
+  # @return [Boolean] whether the king is under attack
   def is_check
     king = @pieces.find { |p| p.type == "King" && p.color != @current_turn }
     # king.generate_moves
     if king&.is_checked?()
       @sounds.move_check.play if @render
+      @checked_king = king
       @checked = true
       @no_legal_moves = true
       blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first)
@@ -256,12 +281,17 @@ class Board
       end
 
       king.generate_moves
+      puts "#{king.name} #{king.moves.inspect}"
+      puts @no_legal_moves
       if @no_legal_moves && king.moves.empty?
+        @game_over = true
         checkmate_ui
       end
     else
       king&.attacking_pieces&.clear
       @checked = false
+      @white_check = false
+      @black_check = false
     end
   end
 
@@ -374,7 +404,7 @@ class Board
         @pieces.add(captured_piece)
       end
     end
-
+    @checked = false
     @game_over = false
     # Clear highlights and reset state
     clear_previous_selection(only_moves: false)
@@ -395,9 +425,8 @@ class Board
   end
 
   def promotion_ui()
-    if @clicked_piece.color == "Black"
+    if !@player_playing
       # Automatically promote black pawn to Queen
-      @clicked_piece.render.remove
       @clicked_piece.promotion("Queen")
       @promotion = false
       turn
@@ -500,7 +529,7 @@ class Board
     else
       # Iterate to add each blocking square until reaching the attacking piece
       while [x, y] != [attacking_piece.x + dx * 80, attacking_piece.y + dy * 80]
-        break if count == 100  # Prevent infinite loop
+        break if count == 100  # Prevent infinite loop due to unfound move to block the check
         
         # Add square to blocking_squares, converting to board coordinates
         blocking_squares.add([x / 80, y / 80])
@@ -514,6 +543,7 @@ class Board
   
     return blocking_squares.to_a
   end
+
   def game_result_ui()
     @overlay = Rectangle.new(
       x: 0,
@@ -566,7 +596,6 @@ class Board
   
   def checkmate_ui()
     if @player_playing
-      @game_over = true
       @sounds.game_end.play
       game_result_ui
       # Winner text

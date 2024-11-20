@@ -15,7 +15,9 @@ on :key_down do |event|
   if event.key == 'z'
     board.unmake_move
   elsif event.key == 'y'
-    board.remake_move
+    board.pieces.each do |piece|
+      piece.render_piece
+    end
   elsif event.key == 'r'
     board.reset_board
   elsif event.key == 'd'

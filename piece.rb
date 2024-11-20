@@ -10,7 +10,7 @@ class Piece
   def initialize(x, y, piece, board)
     @x, @y, @piece, @board = x, y, piece, board
     @attacking_pieces = Set.new()
-    @moves = Array.new()
+    @moves = Set.new()
     @pre_x = Array.new()
     @pre_y = Array.new()
     @captured_pieces = Array.new()
@@ -71,7 +71,7 @@ class Piece
 
   def get_value
     case type
-    when "King" then 10000
+    when "King" then 2000
     when "Queen" then 1000
     when "Rook" then 500
     when "Bishop" then 350
@@ -80,6 +80,7 @@ class Piece
     end
   end
 
+  
   
   def generate_moves()
     @moves.clear
@@ -272,15 +273,15 @@ class Piece
     target_piece = @board.pieces.find { |p| p.x == new_x * 80 && p.y == new_y * 80}
     # Empty square or perform a xray attack  
     if target_piece.nil? || (target_piece.type == "King" && target_piece.color != color && @bot)
-      @moves.push([new_x, new_y])
+      @moves.add([new_x, new_y])
       true
     # Capture a piece
     elsif target_piece.color != color
-      @moves.push([new_x, new_y])
+      @moves.add([new_x, new_y])
       false
     # Protect a friendly piece
     elsif target_piece.color == color && @bot
-      @moves.push([new_x, new_y])
+      @moves.add([new_x, new_y])
       false
     end
     
