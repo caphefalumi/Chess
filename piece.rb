@@ -25,12 +25,16 @@ class Piece
     @generating_moves = false
   end
 
+  # Returns the rank of piece on board
   def rank
     @x / 80
   end
+
+  # Returns the file of piece on board
   def file
     @y / 80
   end
+  # Return an array of rank and file
   def position
     [@x, @y]
   end
@@ -135,6 +139,7 @@ class Piece
   
 
   def is_checked?(rank = @x / 80, file = @y / 80)
+    # return false if !@board.player_playing 
     king_position = [rank, file]
     @is_checked = false
   

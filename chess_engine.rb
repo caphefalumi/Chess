@@ -9,16 +9,6 @@ class Engine
     @move_travel = 0
   end
 
-  def king_safety_score(color)
-    king = @board.pieces.find { |piece| piece.color == color && piece.type == "King" }
-    return 0 unless king
-  
-    # Penalize the king for being in exposed positions
-    safety_penalty = 0
-    safety_penalty += 100 if king.file.between?(3, 6) # Center of the board
-    safety_penalty += 50 if @board.is_open_file(king.file) # Open file penalty
-    return safety_penalty
-  end
   
   def get_eval_table(piece)
     
@@ -64,7 +54,7 @@ class Engine
 
   private def minimax_eval(legal_moves, depth, maximizing_player, alpha = -Float::INFINITY, beta = Float::INFINITY)
     # Base case: check for max depth or game over state
-    if depth == 0
+    if depth == 0 || @board.game_over
       return evaluate(maximizing_player)
     end
     
