@@ -23,12 +23,7 @@ on :key_down do |event|
   elsif event.key == 'd'
     moves = board.get_moves()
     moves.each do |move|
-      puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
-    end
-    board.unmake_move()
-    moves = board.get_moves()
-    moves.each do |move|
-      puts "#{move[:piece].name} #{move[:from].inspect} #{move[:to].inspect}"
+      puts "#{move[:piece].name} #{move[:to].inspect}"
     end
   elsif event.key == 'p'
     close

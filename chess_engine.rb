@@ -4,12 +4,11 @@ class Engine
   def initialize(board)
     @board = board
     @best_move = nil
-    @max_depth = 2
+    @max_depth = 3
     @node_travel = 0
     @move_travel = 0
   end
 
-  
   def get_eval_table(piece)
     
     position = piece.file * 8 + piece.rank
@@ -46,12 +45,10 @@ class Engine
     end
 
     evaluation = white_score - black_score
-    perspective = maximizing_player ? 1 : -1
+    perspective = maximizing_player ? -1 : 1
     return evaluation * perspective
   end
-
   
-
   private def minimax_eval(legal_moves, depth, maximizing_player, alpha = -Float::INFINITY, beta = Float::INFINITY)
     # Base case: check for max depth or game over state
     if depth == 0 || @board.game_over
@@ -59,6 +56,7 @@ class Engine
     end
     
     @node_travel += 1
+  
     if maximizing_player
       max_score = -Float::INFINITY
   
@@ -69,14 +67,9 @@ class Engine
         # Make move
         @board.make_move(piece, target_pos[0], target_pos[1])
         next_moves = @board.get_moves
-        
-        if @board.checked && @board.checked_king.color == "Black"
-          puts "CHECK"  
-          score = -Float::INFINITY-1
+  
         # Recursive evaluation
-        else
-          score = minimax_eval(next_moves, depth - 1, false, alpha, beta)
-        end
+        score = minimax_eval(next_moves, depth - 1, false, alpha, beta)
         if score > max_score
           max_score = score
           if depth == @max_depth
@@ -106,13 +99,7 @@ class Engine
         # Make move
         @board.make_move(piece, target_pos[0], target_pos[1])
         next_moves = @board.get_moves
-        if @board.checked && @board.checked_king.color == "White"
-          puts " White check"
-          score = Float::INFINITY + 1
-        # Recursive evaluation
-        else 
-          score = minimax_eval(next_moves, depth - 1, true, alpha, beta)
-        end
+        score = minimax_eval(next_moves, depth - 1, true, alpha, beta)
         if score < min_score
           min_score = score
           if depth == @max_depth
@@ -125,7 +112,6 @@ class Engine
         # Alpha-beta pruning
         beta = [beta, score].min
         if alpha >= beta
-
           break
         end
       end
@@ -136,25 +122,24 @@ class Engine
 
   # Finds and executes the best move using Minimax
   def minimax
-    @best_move = nil
-    @board.player_playing = false
-    moves = @board.get_moves
-    @board.time = 0
-    @board.render = false
-    minimax_eval(moves, @max_depth, true)
-    @board.render = true
-    if @best_move
-      piece, target_pos = @best_move
-      puts piece.moves.inspect
-      puts @board.time
-      puts "Best move: #{piece.name} to #{target_pos}"
-      puts "Total nodes search #{@node_travel}"
-      puts "Total moves search #{@move_travel}"
-      # Execute the best move
-      @board.make_move(piece, target_pos[0], target_pos[1])
+      @best_move = nil
+      @board.player_playing = false
+      moves = @board.get_moves
+      @board.render = false
+      minimax_eval(moves, @max_depth, true)
+      @board.render = true
       @board.player_playing = true
-    end
-    @node_travel = 0
+      if @best_move
+        piece, target_pos = @best_move
+        puts @board.time
+        puts "Best move: #{piece.name} to #{target_pos}"
+        puts "Total nodes search #{@node_travel}"
+        puts "Total moves search #{@move_travel}"
+        # Execute the best move
+        @board.make_move(piece, target_pos[0], target_pos[1], true)
+      end
+      @node_travel = 0
+
   end
 
 
@@ -165,7 +150,7 @@ class Engine
     @board.clear_previous_selection(only_moves: false)
     if moves
       puts "Moving #{random_piece[:piece].name}"
-      @board.make_move(random_piece[:piece], moves[0], moves[1])
+      @board.make_move(random_piece[:piece], moves[0], moves[1], true)
     end
   end
 end

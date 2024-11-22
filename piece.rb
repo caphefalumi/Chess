@@ -5,7 +5,7 @@ require 'set'
 
 class Piece
   attr_reader :piece, :render, :promoted, :blocking_squares
-  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_en_passant, :moved_at, :captured_pieces, :promoted, :capture_history, :attacking_pieces, :is_pinned, :is_moved, :is_checked
+  attr_accessor :x, :y, :pre_x, :pre_y, :bot, :moves, :can_en_passant, :moved_at, :captured_pieces, :promoted, :attacking_pieces, :is_pinned, :is_moved, :is_checked
 
   def initialize(x, y, piece, board)
     @x, @y, @piece, @board = x, y, piece, board
@@ -14,7 +14,6 @@ class Piece
     @pre_x = Array.new()
     @pre_y = Array.new()
     @captured_pieces = Array.new()
-    @capture_history = Array.new()
     @promoted = [0, false]
     @bot = false
     @is_moved = false
@@ -154,12 +153,11 @@ class Piece
         end
         next
       end
-  
+      
       generate_bot_moves(piece)
       if piece.moves.include?(king_position)
-        if piece.type == "Pawn" && piece.rank == king_position[0]
-          @is_checked = false
-        else
+        #Handle case where king can move to the square that pawn can move up.
+        if piece.type != "Pawn" && piece.rank != king_position[0]
           @attacking_pieces.add(piece) if !@generating_moves
           @is_checked = true
           break if @attacking_pieces.size == 2 # Optimization: Stop if two attackers are found

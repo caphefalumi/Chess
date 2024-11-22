@@ -41,14 +41,13 @@ end
 
 
 class Board
-  attr_reader :game_over, :checked, :checked_king
-  attr_accessor :clicked_piece, :time, :pieces, :current_turn, :render, :player_playing, :player_move_history, :bot_move_history
+  attr_reader :game_over, :checked
+  attr_accessor :clicked_piece, :time, :pieces, :current_turn, :render, :player_playing, :player_move_history
   def initialize
     @sounds = Sounds.new()
     @pieces = Set.new()
     @moves = Set.new()
     @player_move_history = Array.new()
-    @bot_move_history = Array.new()
     @clicked_piece = nil
     @checked = false
     @promotion = false
@@ -159,7 +158,6 @@ class Board
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     if @clicked_piece
       king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color }
-      @clicked_piece.bot = false
       @clicked_piece.generate_moves
       if @checked
         handle_check(@clicked_piece, king)
@@ -229,12 +227,11 @@ class Board
   end
 
   # Attempts to move the piece or capture an opponent piece
-  def make_move(piece, rank, file)
+  def make_move(piece, rank, file, bot_move=false)
     # return if not piece  
     target_move = [rank, file]
     # # Check if the target move is in the list of legal moves
-    if !piece.moves.include?(target_move) && @player_playing
-      
+    if !piece.moves.include?(target_move) && @player_playing && !bot_move
       handle_illegal_move
       reset_state_after_move
       return
@@ -243,13 +240,12 @@ class Board
     target_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     move_piece(piece, rank, file)
 
+    piece.captured_pieces << target_piece
+
     if target_piece
       capture_piece(piece, target_piece)
-      piece.capture_history << true
-    else
-      piece.capture_history << false
     end
-
+    
     @player_move_history << piece 
     
     is_check
@@ -263,10 +259,8 @@ class Board
   # @return [Boolean] whether the king is under attack
   def is_check
     king = @pieces.find { |p| p.type == "King" && p.color != @current_turn }
-    # king.generate_moves
     if king&.is_checked?()
-      @sounds.move_check.play if @render
-      @checked_king = king
+      @sounds.move_check.play if @player_playing
       @checked = true
       @no_legal_moves = true
       blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first)
@@ -281,14 +275,13 @@ class Board
       end
 
       king.generate_moves
-      puts "#{king.name} #{king.moves.inspect}"
-      puts @no_legal_moves
       if @no_legal_moves && king.moves.empty?
         @game_over = true
         checkmate_ui
       end
     else
       king&.attacking_pieces&.clear
+      @checked_king = nil
       @checked = false
       @white_check = false
       @black_check = false
@@ -395,14 +388,11 @@ class Board
       piece_to_undo.promotion("Pawn")
       piece_to_undo.promoted = [@player_move_history.size, false]
     end
-    is_captured = piece_to_undo.capture_history.pop
-    # Restore captured piece if any (regular capture)
-    if is_captured
-      captured_piece = piece_to_undo.captured_pieces.pop
-      if captured_piece
-        captured_piece.render_piece if @render
-        @pieces.add(captured_piece)
-      end
+  # Restore captured piece if any (regular capture)
+    captured_piece = piece_to_undo.captured_pieces.pop
+    if captured_piece
+      captured_piece.render_piece if @render
+      @pieces.add(captured_piece)
     end
     @checked = false
     @game_over = false
@@ -421,7 +411,6 @@ class Board
     target_piece.render.remove if @render
     @pieces.delete(target_piece)
     @sounds.capture.play if @render
-    piece.captured_pieces << target_piece
   end
 
   def promotion_ui()
@@ -656,10 +645,8 @@ class Board
   end
   
   def handle_illegal_move
-    if @render
-      @sounds.illegal.play
-      highlight_illegal_move(@clicked_piece)
-    end
+    @sounds.illegal.play
+    highlight_illegal_move(@clicked_piece)
     @illegal_state = true
   end
 
