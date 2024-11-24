@@ -62,11 +62,9 @@ class Board
   end
 
   # Initializes a new chess board.
-  #
   # This method returns a 2D array representing a chess board. The
   # array is 8x8 and each element of the array is a Piece object.
   # The board is initialized with the standard starting pieces.
-  #
   def initialize_board
     [
       [PieceEval::ROOK | PieceEval::BLACK, PieceEval::KNIGHT | PieceEval::BLACK, PieceEval::BISHOP | PieceEval::BLACK, PieceEval::QUEEN | PieceEval::BLACK, PieceEval::KING | PieceEval::BLACK, PieceEval::BISHOP | PieceEval::BLACK, PieceEval::KNIGHT | PieceEval::BLACK, PieceEval::ROOK | PieceEval::BLACK],
@@ -216,7 +214,7 @@ class Board
     time1 = Time.new
     available_moves = Set.new
     # Find all pieces for the current turn and calculate their moves
-    @pieces.each do |piece|
+    @dup_pieces.each do |piece|
       next if piece.color != @current_turn # Skip pieces of the other color
       # Generate legal moves for this piece
       piece.generate_moves
@@ -404,13 +402,16 @@ class Board
       piece_to_undo.promotion("Pawn")
       piece_to_undo.promoted = [@player_move_history.size, false]
     end
-  # Restore captured piece if any (regular capture)
+    
+    # Restore captured piece if any (regular capture)
     captured_piece = piece_to_undo.captured_pieces.pop
     if captured_piece
       captured_piece.render_piece if @render
       @pieces.add(captured_piece)
     end
 
+    @checked = false
+    @game_over = false
     # Clear highlights and reset state
     clear_previous_selection(only_moves: false)
     reset_state_after_move
@@ -424,7 +425,7 @@ class Board
   # Captures the opponent's piece
   def capture_piece(target_piece)
     target_piece.render.remove if @render
-    puts "#{piece.name} #{target_piece.name}"
+    puts " #{target_piece.name}"
     @pieces.delete(target_piece)
     @sounds.capture.play if @render
   end
@@ -499,9 +500,6 @@ class Board
 # If the king is being attacked by two pieces, it clears the moves of the selected piece
 # unless it is the king itself. Otherwise, it updates the legal moves of the piece
 # to ensure the king's safety.
-#
-# @param piece [Piece] the selected piece to evaluate
-# @param king [Piece] the king of the same color that is potentially in check
   def handle_check(piece, king)
     if piece.type != "King" && king.attacking_pieces.size == 2
       piece.moves.clear
@@ -523,9 +521,6 @@ class Board
 # Updates the legal moves for the given piece based on whether the king is under attack.
 # If the king is being attacked, it calculates the blocking squares and removes moves
 # that are not part of those blocking squares from the piece's moves.
-#
-# @param piece [Piece] the piece for which to update legal moves
-# @param king [Piece] the king of the same color whose safety is being considered
   def update_legal_moves(piece, king)
     if king.attacking_pieces.any?
       blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first) 

@@ -183,6 +183,8 @@ class Engine
         puts "Total moves search #{@move_travel}"
         # Execute the best move
         @board.make_move(piece, target_pos[0], target_pos[1], true)
+      else
+        random
       end
       @node_travel = 0
 
