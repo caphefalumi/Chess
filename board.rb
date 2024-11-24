@@ -41,8 +41,8 @@ end
 
 
 class Board
-  attr_reader :game_over, :checked
-  attr_accessor :clicked_piece, :time, :pieces, :current_turn, :render, :player_playing, :player_move_history
+  attr_reader :game_over
+  attr_accessor :clicked_piece, :time, :checked, :pieces, :current_turn, :render, :player_playing, :player_move_history
   def initialize
     @sounds = Sounds.new()
     @pieces = Set.new()
@@ -115,6 +115,14 @@ class Board
     @sounds.game_start.play
   end
   
+# Handles mouse click events on the board.
+#
+# This method determines the rank and file of the clicked position based on the
+# mouse coordinates and processes the click based on the current game state.
+# If the left mouse button is clicked, it clears any previous selection and
+# handles specific game states, including checkmate, promotion, and normal piece
+# selection and movement. It resets the illegal move state if a piece is clicked
+# during an illegal state.
   def handle_mouse_click(mouse)
     rank, file = (mouse.x / 80).to_i, (mouse.y / 80).to_i
     @mouse_x, @mouse_y = mouse.x, mouse.y
@@ -222,11 +230,7 @@ class Board
     return available_moves
   end
 
-  def order_moves(moves)
-    moves.sort_by { |move| move[:piece].moves.index(move[:to]) }
-  end
-
-  # Attempts to move the piece or capture an opponent piece
+  # Move the piece or capture an opponent piece
   def make_move(piece, rank, file, bot_move=false)
     # return if not piece  
     target_move = [rank, file]
@@ -243,7 +247,7 @@ class Board
     piece.captured_pieces << target_piece
 
     if target_piece
-      capture_piece(piece, target_piece)
+      capture_piece(target_piece)
     end
     
     @player_move_history << piece 
@@ -258,8 +262,9 @@ class Board
   #
   # @return [Boolean] whether the king is under attack
   def is_check
-    king = @pieces.find { |p| p.type == "King" && p.color != @current_turn }
+    king = @pieces.find { |p| p.type == "King" && p.color != @clicked_piece.color }
     if king&.is_checked?()
+      @sounds.move_self.pause
       @sounds.move_check.play if @player_playing
       @checked = true
       @no_legal_moves = true
@@ -288,6 +293,14 @@ class Board
     end
   end
 
+# Moves the specified piece to the target rank and file. Updates the piece's
+# position history and handles special move types such as castling,
+# promotion, and en passant. If rendering is enabled, the move is visually
+# represented on the board. Plays appropriate sounds based on the move type.
+#
+# @param piece [Piece] the piece to be moved
+# @param rank [Integer] the target rank position on the board
+# @param file [Integer] the target file position on the board
   def move_piece(piece, rank, file)
     piece.pre_x << piece.x
     piece.pre_y << piece.y
@@ -331,7 +344,7 @@ class Board
         ((start_y + 80 == piece.y && piece.color == "Black") || 
         (start_y - 80 == piece.y && piece.color == "White"))
         
-        capture_piece(@clicked_piece, @player_move_history.last)
+        capture_piece(@player_move_history.last)
         en_passant_flag = true
       end
     end
@@ -341,6 +354,9 @@ class Board
     end
   end
   
+  # Reverts the last move made by a player. Handles castling, promotion and regular captures.
+  # Restores the piece's previous position, removes any rendered moves, and resets the state
+  # of the game. Switches the turn back to the previous player.
   def unmake_move
     # Return if there are no past moves
     return if @player_move_history.empty?
@@ -394,8 +410,7 @@ class Board
       captured_piece.render_piece if @render
       @pieces.add(captured_piece)
     end
-    @checked = false
-    @game_over = false
+
     # Clear highlights and reset state
     clear_previous_selection(only_moves: false)
     reset_state_after_move
@@ -407,12 +422,18 @@ class Board
   end
 
   # Captures the opponent's piece
-  def capture_piece(piece, target_piece)
+  def capture_piece(target_piece)
     target_piece.render.remove if @render
+    puts "#{piece.name} #{target_piece.name}"
     @pieces.delete(target_piece)
     @sounds.capture.play if @render
   end
 
+  # Called when a player makes a promotion move. Automatically promotes black pawns to
+  # Queens, and displays a promotion menu for white pawns. The promotion menu consists of
+  # a gray rectangle with four options: Queen, Rook, Bishop, and Knight. The user can click
+  # on one of the options to select the promotion piece. If the user is playing as black,
+  # the promotion is automatically done.
   def promotion_ui()
     if !@player_playing
       # Automatically promote black pawn to Queen
@@ -438,6 +459,10 @@ class Board
     end
   end
   
+  # Called when a player makes a promotion move. Checks if the mouse is
+  # within the bounds of one of the promotion pieces, and if so, removes the
+  # old piece, promotes the piece to the selected type, removes the promotion
+  # menu, and ends the promotion mode.
   def handle_promotion()
     (0..3).each do |i|
       image = @promotion_options[i][0]
@@ -456,6 +481,8 @@ class Board
     end
   end
 
+  # Castles the king with the rook at the specified rank and file, if the rook has not moved before.
+  # The rook is moved to its new position, and the castle sound is played if the board is being rendered.
   def castle(rank, file)
     rook_x = rank == 6 ? 7 * 80 : 0
     rook = @pieces.find { |p| p.type == "Rook" && p.color == @clicked_piece.color && p.x == rook_x && p.is_moved == false}
@@ -467,6 +494,14 @@ class Board
     end
   end
 
+
+# Handles the scenario where a piece is selected while the king is in check.
+# If the king is being attacked by two pieces, it clears the moves of the selected piece
+# unless it is the king itself. Otherwise, it updates the legal moves of the piece
+# to ensure the king's safety.
+#
+# @param piece [Piece] the selected piece to evaluate
+# @param king [Piece] the king of the same color that is potentially in check
   def handle_check(piece, king)
     if piece.type != "King" && king.attacking_pieces.size == 2
       piece.moves.clear
@@ -474,13 +509,23 @@ class Board
       update_legal_moves(piece, king)
     end
   end
-
+  
+  # Updates the legal moves for the given piece based on whether the piece is pinned.
+  # If the piece is pinned, it calculates the blocking squares and removes moves
+  # that are not part of those blocking squares from the piece's moves.
   def handle_pin(piece, king)
     if piece.type != "King" && piece.is_pinned?
       update_legal_moves(piece, king)
     end
   end
   
+
+# Updates the legal moves for the given piece based on whether the king is under attack.
+# If the king is being attacked, it calculates the blocking squares and removes moves
+# that are not part of those blocking squares from the piece's moves.
+#
+# @param piece [Piece] the piece for which to update legal moves
+# @param king [Piece] the king of the same color whose safety is being considered
   def update_legal_moves(piece, king)
     if king.attacking_pieces.any?
       blocking_squares = calculate_blocking_squares(king.position, king.attacking_pieces.first) 
@@ -488,6 +533,7 @@ class Board
     end
   end
 
+# Filters out moves that do not block a check.
   def illegal_moves(blocking_squares, piece)
     moves_to_delete = []
     if piece.type != "King"
@@ -500,6 +546,10 @@ class Board
     return moves_to_delete
   end
 
+  # Given a king position and an attacking piece, calculates the set of squares that
+  # would block the check if moved to. For non-knight pieces, this is the set of squares
+  # between the king and the attacking piece. For knight pieces, this is just the square
+  # the knight is on. Returns a Set of squares as [x, y] coordinates.
   def calculate_blocking_squares(king_pos, attacking_piece)
     blocking_squares = Set.new
     
@@ -533,6 +583,12 @@ class Board
     return blocking_squares.to_a
   end
 
+  # Creates UI elements for displaying the game result (win/lose/draw)
+  #
+  # Includes an overlay, a dialog box, winner text, and a "Play Again" button
+  #
+  # The UI elements are added to the `@overlay`, `@dialog`, `@game_result`, 
+  # `@play_again_button`, and `@play_again_text` instance variables.
   def game_result_ui()
     @overlay = Rectangle.new(
       x: 0,
@@ -583,6 +639,8 @@ class Board
     )
   end
   
+# Displays the checkmate UI and plays the game end sound if the player is currently playing.
+# Updates the game result text to show which player wins by checkmate.
   def checkmate_ui()
     if @player_playing
       @sounds.game_end.play
@@ -592,6 +650,8 @@ class Board
     end
   end
 
+  # Handles the play again button click, reseting the board to its initial state
+  # and removing the checkmate UI.
   def handle_checkmate()
     if area_clicked(@play_again_button.x, @play_again_button.y, @play_again_button.x + @play_again_button.width, @play_again_button.y + @play_again_button.height)
       reset_board
@@ -644,6 +704,8 @@ class Board
     @clicked_square.color.opacity = 0.8
   end
   
+  # Handles an illegal move by playing a sound, visually highlighting the piece, 
+  # and setting the illegal state flag.
   def handle_illegal_move
     @sounds.illegal.play
     highlight_illegal_move(@clicked_piece)
@@ -667,6 +729,12 @@ class Board
     clear_previous_selection(only_moves: true)
   end 
 
+# Resets the chess board to its initial state.
+#
+# This method clears all pieces from the board, removes any visual highlights
+# or selection indicators, and reinitializes the board to the standard starting
+# position for a new game. It also resets game state variables such as the
+# current turn, check status, and promotion flags.
   def reset_board
     @pieces.each { |piece| piece.render.remove }
     @pieces.clear

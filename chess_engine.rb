@@ -1,37 +1,72 @@
 require_relative 'eval_table'
 
+
+
+
+
 class Engine
   def initialize(board)
     @board = board
     @best_move = nil
-    @max_depth = 3
+    @max_depth = 2
     @node_travel = 0
     @move_travel = 0
   end
 
+  # Given a piece, returns the evaluation table value for that piece at its current position.
   def get_eval_table(piece)
     
     position = piece.file * 8 + piece.rank
-    # puts "#{piece.rank} #{piece.rank}"
-    table = case piece.type
-            when "Pawn"
-              PAWN_TABLE[position]
-            when "Night"
-              KNIGHTS_TABLE[position]
-            when "Bishop"
-              BISHOPS_TABLE[position]
-            when "Rook"
-              ROOKS_TABLE[position]
-            when "Queen"
-              QUEENS_TABLE[position]
-            when "King"
-              KINGS_TABLE[position]
-            else
-              0
-            end
+    if piece.color == "White"
+      table = case piece.type
+              when "Pawn"
+                PAWN_TABLE[position]
+              when "Night"
+                KNIGHTS_TABLE[position]
+              when "Bishop"
+                BISHOPS_TABLE[position]
+              when "Rook"
+                ROOKS_TABLE[position]
+              when "Queen"
+                QUEENS_TABLE[position]
+              when "King"
+                KINGS_TABLE[position]
+              else
+                0
+              end
+    else
+      table = case piece.type
+              when "Pawn"
+                PAWN_TABLE.reverse[position]
+              when "Night"
+                KNIGHTS_TABLE.reverse[position]
+              when "Bishop"
+                BISHOPS_TABLE.reverse[position]
+              when "Rook"
+                ROOKS_TABLE.reverse[position]
+              when "Queen"
+                QUEENS_TABLE.reverse[position]
+              when "King"
+                KINGS_TABLE.reverse[position]
+              else
+                0
+              end
+    end
+
     return table
   end
 
+# Evaluates the current board position from the perspective of the player.
+#
+# This method calculates the total score for both black and white pieces on the board
+# by summing up their values and position-based evaluation tables. It then computes
+# the evaluation score by subtracting the black score from the white score. The
+# result is adjusted based on the perspective of the maximizing player.
+#
+# @param maximizing_player [Boolean] determines the perspective from which the 
+#   board is evaluated; true if the current player is the maximizing player.
+# @return [Integer] the evaluation score of the board position, adjusted for
+#   the perspective of the player.
   def evaluate(maximizing_player)
     black_score = 0
     white_score = 0
@@ -66,10 +101,14 @@ class Engine
         @move_travel += 1
         # Make move
         @board.make_move(piece, target_pos[0], target_pos[1])
-        next_moves = @board.get_moves
-  
+        if @board.checked 
+          score = Float::INFINITY
+          @board.checked = false
         # Recursive evaluation
-        score = minimax_eval(next_moves, depth - 1, false, alpha, beta)
+        else 
+          next_moves = @board.get_moves
+          score = minimax_eval(next_moves, depth - 1, false, alpha, beta)
+        end
         if score > max_score
           max_score = score
           if depth == @max_depth
@@ -98,8 +137,14 @@ class Engine
   
         # Make move
         @board.make_move(piece, target_pos[0], target_pos[1])
-        next_moves = @board.get_moves
-        score = minimax_eval(next_moves, depth - 1, true, alpha, beta)
+        if @board.checked
+          score = -Float::INFINITY
+          @board.checked = false
+        else
+          next_moves = @board.get_moves
+          
+          score = minimax_eval(next_moves, depth - 1, true, alpha, beta)
+        end
         if score < min_score
           min_score = score
           if depth == @max_depth
@@ -124,11 +169,12 @@ class Engine
   def minimax
       @best_move = nil
       @board.player_playing = false
-      moves = @board.get_moves
       @board.render = false
+      moves = @board.get_moves
       minimax_eval(moves, @max_depth, true)
       @board.render = true
       @board.player_playing = true
+      
       if @best_move
         piece, target_pos = @best_move
         puts @board.time
@@ -143,14 +189,25 @@ class Engine
   end
 
 
+  # Makes a random move from the given legal moves.
+  #
+  # This method is used to play a game of chess without any AI, simply by making
+  # random moves. It samples a random piece from the legal moves, and then samples
+  # a random target position from the piece's possible moves. It makes the move
+  # if the target position is valid. The move is not animated, and the game state
+  # is not updated after the move is made.
   def random
     legal_moves = @board.get_moves
-    random_piece = legal_moves.sample
-    moves = random_piece[:to].to_a.sample
+    random_piece = legal_moves.to_a.sample
+    moves = random_piece[:to]
     @board.clear_previous_selection(only_moves: false)
     if moves
       puts "Moving #{random_piece[:piece].name}"
       @board.make_move(random_piece[:piece], moves[0], moves[1], true)
+      if @board.checked
+        @board.unmake_move
+        random
+      end
     end
   end
 end
