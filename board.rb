@@ -1,6 +1,5 @@
 require 'ruby2d'
 require 'set'
-require 'benchmark'
 require_relative 'piece'
 require_relative 'chess_engine'
 
@@ -163,7 +162,7 @@ class Board
   def select_piece(rank, file)
     @clicked_piece = @pieces.find { |p| p.x == rank * 80 && p.y == file * 80 }
     if @clicked_piece
-      king = @pieces.find { |p| p.type == "King" && p.color == @clicked_piece.color }
+      king = @pieces.find { |p| p.type == "King" && p.color == @current_turn }
       @clicked_piece.generate_moves
       if @checked
         handle_check(@clicked_piece, king)
@@ -214,7 +213,7 @@ class Board
     time1 = Time.new
     available_moves = Set.new
     # Find all pieces for the current turn and calculate their moves
-    @dup_pieces.each do |piece|
+    @pieces.each do |piece|
       next if piece.color != @current_turn # Skip pieces of the other color
       # Generate legal moves for this piece
       piece.generate_moves

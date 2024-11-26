@@ -1,7 +1,11 @@
 require 'ruby2d'
 require_relative 'board'
-set width: 640, height: 640
 
+
+
+
+set width: 640, height: 640
+set title: "Chess"
 # Initialize Game
 board = Board.new
 
@@ -11,6 +15,8 @@ end
 on :key_down do |event|
   if event.key == 'z'
     board.unmake_move
+  elsif event.key == 'r'
+    board.reset_board
   end
 end
 show
