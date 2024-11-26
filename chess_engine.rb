@@ -80,7 +80,7 @@ class Engine
     end
 
     evaluation = white_score - black_score
-    perspective = maximizing_player ? -1 : 1
+    perspective = maximizing_player ? 1 : -1
     return evaluation * perspective
   end
   
@@ -119,9 +119,7 @@ class Engine
         @board.unmake_move
   
         # Alpha-beta pruning
-        if max_score > alpha
-          alpha = max_score
-        end
+        alpha = [max_score, alpha].max
         if alpha >= beta
           break
         end
